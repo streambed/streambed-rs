@@ -1,5 +1,10 @@
-streambed-rs - Event Driven services toolkit
+streambed-rs - Event-driven services toolkit
 ===
+
+Event-driven services
+---
+
+Event driven microservices promote responsiveness resulting in decisions being able to be made faster. Services also become more resilient to failure as they can quickly re-build their state by having events re-played.
 
 Efficient
 ---
@@ -15,7 +20,6 @@ Built for integration
 ---
 
 Streambed is a toolkit that promotes the consented sharing of data between many third-party applications. No more silos of data. Improved data availability leads to better decision making, which leads to better business.
-
 
 Standing on the shoulders of giants, leveraging existing communities
 ---
