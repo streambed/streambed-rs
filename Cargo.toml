@@ -1,0 +1,31 @@
+[package]
+name = "streambed"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aes ="0.8"
+async-stream = "0.3"
+async-trait = "0.1"
+base64 = "0.13"
+cache_loader_async = { version = "0.2.0", features = ["lru-cache", "ttl-cache"] }
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "3.1", features = ["derive", "env"] }
+env_logger = "0.9"
+git-version = "0.3"
+hex = "0.4"
+humantime = "2.1"
+log = "0.4"
+metrics = "0.18"
+metrics-exporter-prometheus = "0.9"
+metrics-util = "0.12"
+rand = "0.8"
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.17", features = ["full"] }
+tokio-stream = "0.1"
+
+[dev-dependencies]
+http = "0.2"
+hyper = { version = "0.14", default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server", "runtime"] }
