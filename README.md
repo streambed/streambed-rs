@@ -4,17 +4,17 @@ streambed-rs - Event-driven services toolkit
 Event-driven services
 ---
 
-Event driven microservices promote responsiveness resulting in decisions being able to be made faster. Services also become more resilient to failure as they can quickly re-build their state by having events re-played.
+Event driven microservices promote responsiveness allowing decisions to be made faster. Services also become more resilient to failure as they can quickly rebuild their state by replaying events.
 
 Efficient
 ---
 
-Streambed-based applications are designed to run at the edge on embedded computers as well as the cloud and so efficient cpu and memory usage are of primary concern.
+Streambed based applications are designed to run at the edge on embedded computers as well as in the cloud and so efficient CPU and memory usage are of primary concern.
 
 Secure
 ---
 
-Security is a primary consideration throughout the design of Streambed. For example, in the world of the Internet of Things, if an individual sensor becomes compromised then its effects can be minimized.
+Security is another primary consideration throughout the design of Streambed. For example, in the world of the Internet of Things, if an individual sensor becomes compromised then its effects can be minimized.
 
 Built for integration
 ---
@@ -34,4 +34,4 @@ Streambed is entirely open source providing cost benefits, fast-time-to-market, 
 Rust
 ---
 
-Streambed build's on Rust's traits of writing fast and efficient software correctly.
+Streambed builds on Rust's traits of writing fast and efficient software correctly.
