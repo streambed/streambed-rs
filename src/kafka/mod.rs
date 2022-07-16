@@ -36,11 +36,11 @@ impl KafkaRestCommitLog {
         INIT.call_once(|| {
             describe_counter!(
                 "consumer_group_requests",
-                "number of consumer group requests"
+                "number of consumer group requests".into()
             );
             describe_counter!(
                 "consumer_group_request_failures",
-                "number of consumer group request failures"
+                "number of consumer group request failures".into()
             );
         });
 
