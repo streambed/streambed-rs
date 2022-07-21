@@ -12,7 +12,7 @@ cache_loader_async = { version = "0.2.0", features = ["lru-cache", "ttl-cache"] 
 hex = "0.4"
 humantime = "2.1"
 log = "0.4"
-metrics = "0.18"
+metrics = "0.20"
 rand = "0.8"
 reqwest = { version = "0.11", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
