@@ -108,11 +108,13 @@ pub async fn decrypt_buf<'a, T>(
 where
     T: Deserialize<'a>,
 {
-    if let Some(secret_value) = get_secret_value(ss, secret_path).await {
-        if let Ok(s) = hex::decode(secret_value) {
-            let (salt, bytes) = buf.split_at_mut(crypto::SALT_SIZE);
-            crypto::decrypt(bytes, &s, salt);
-            return serde_json::from_slice(bytes).ok().flatten();
+    if buf.len() >= crypto::SALT_SIZE {
+        if let Some(secret_value) = get_secret_value(ss, secret_path).await {
+            if let Ok(s) = hex::decode(secret_value) {
+                let (salt, bytes) = buf.split_at_mut(crypto::SALT_SIZE);
+                crypto::decrypt(bytes, &s, salt);
+                return serde_json::from_slice(bytes).ok().flatten();
+            }
         }
     }
     None
