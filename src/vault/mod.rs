@@ -67,23 +67,23 @@ impl VaultSecretStore {
         INIT.call_once(|| {
             describe_counter!(
                 "ss_approle_auth_requests",
-                "number of secret server approle auth requests".into()
+                "number of secret server approle auth requests"
             );
             describe_counter!(
                 "ss_get_secret_requests",
-                "number of secret server get secret requests".into()
+                "number of secret server get secret requests"
             );
             describe_counter!(
                 "ss_other_reply_failures",
-                "number of get secret reply failures outside of being unauthorized".into()
+                "number of get secret reply failures outside of being unauthorized"
             );
             describe_counter!(
                 "ss_unavailables",
-                "number of times the secret server is unavailable/offline".into()
+                "number of times the secret server is unavailable/offline"
             );
             describe_counter!(
                 "ss_unauthorized",
-                "number of secret server authorization failures".into()
+                "number of secret server authorization failures"
             );
         });
 
