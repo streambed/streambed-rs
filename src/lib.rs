@@ -186,8 +186,8 @@ where
     T: Serialize,
     U: RngCore,
 {
-    let mut f = fs::File::create(state_storage_path).await?;
     if let Some(buf) = encrypt_struct(ss, secret_path, rng, state).await {
+        let mut f = fs::File::create(state_storage_path).await?;
         f.write_all(&buf).await?;
     }
     Ok(())
