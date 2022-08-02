@@ -34,15 +34,19 @@ async fn kafka_rest_scoped_subscribe() {
         );
 
         let chunks = vec![
-            Record {
+            ConsumerRecord {
                 topic: "default:end-device-events".to_string(),
+                headers: vec![],
+                timestamp: None,
                 key: 0,
                 value: b"hi there".to_vec(),
                 partition: 0,
                 offset: 1,
             },
-            Record {
+            ConsumerRecord {
                 topic: "default:end-device-events".to_string(),
+                headers: vec![],
+                timestamp: None,
                 key: 0,
                 value: b"hi there again".to_vec(),
                 partition: 0,
@@ -90,8 +94,10 @@ async fn kafka_rest_scoped_subscribe() {
 
     assert_eq!(
         events.next().await,
-        Some(Record {
+        Some(ConsumerRecord {
             topic: "default:end-device-events".to_string(),
+            headers: vec![],
+            timestamp: None,
             key: 0,
             value: b"hi there".to_vec(),
             partition: 0,
@@ -100,8 +106,10 @@ async fn kafka_rest_scoped_subscribe() {
     );
     assert_eq!(
         events.next().await,
-        Some(Record {
+        Some(ConsumerRecord {
             topic: "default:end-device-events".to_string(),
+            headers: vec![],
+            timestamp: None,
             key: 0,
             value: b"hi there again".to_vec(),
             partition: 0,
@@ -109,4 +117,76 @@ async fn kafka_rest_scoped_subscribe() {
         })
     );
     assert_eq!(events.next().await, None);
+}
+
+#[tokio::test]
+async fn kafka_publish() {
+    let server = server::http(move |mut req| async move {
+        assert_eq!(req.uri(), "/topics/default:end-device-events");
+
+        let mut req_body: Vec<u8> = Vec::new();
+        while let Some(item) = req.body_mut().next().await {
+            req_body.extend(&*item.unwrap());
+        }
+
+        let req_body: ProducerRecord = serde_json::from_slice(&req_body).unwrap();
+        assert_eq!(
+            req_body,
+            ProducerRecord {
+                topic: "default:end-device-events".to_string(),
+                headers: vec![],
+                timestamp: None,
+                key: 0,
+                value: b"hi there".to_vec(),
+                partition: 0
+            }
+        );
+
+        let body = r#"
+        {
+            "key_schema_id": null,
+            "value_schema_id": null,
+            "offsets": [
+              {
+                "partition": 2,
+                "offset": 100
+              },
+              {
+                "partition": 1,
+                "offset": 101
+              },
+              {
+                "partition": 2,
+                "offset": 102
+              }
+            ]
+        }          
+        "#;
+
+        http::Response::new(body.into())
+    });
+
+    let server_addr = server.addr();
+
+    let cl = KafkaRestCommitLog::new(
+        &Url::parse(&format!(
+            "http://{}:{}",
+            server_addr.ip(),
+            server_addr.port()
+        ))
+        .unwrap(),
+        None,
+        false,
+    );
+
+    let record = ProducerRecord {
+        topic: "default:end-device-events".to_string(),
+        headers: vec![],
+        timestamp: None,
+        key: 0,
+        value: b"hi there".to_vec(),
+        partition: 0,
+    };
+    let result = cl.produce(&record).await.unwrap();
+    assert_eq!(result.offset, 100);
 }

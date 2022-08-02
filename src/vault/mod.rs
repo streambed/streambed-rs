@@ -1,5 +1,6 @@
-/// Provides an implementation of the secret store to be used with the
-/// [Hashicorp Vault Api](https://www.vaultproject.io/api-docs).
+//! Provides an implementation of the secret store to be used with the
+//! [Hashicorp Vault Api](https://www.vaultproject.io/api-docs).
+
 use std::{
     sync::{Arc, Once},
     time::Duration,
