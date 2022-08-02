@@ -2,6 +2,7 @@
 mod support;
 use std::{convert::Infallible, time::Duration};
 
+use serde::Deserialize;
 use support::*;
 
 use reqwest::Url;
@@ -119,6 +120,11 @@ async fn kafka_rest_scoped_subscribe() {
     assert_eq!(events.next().await, None);
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct ProduceRequest {
+    pub records: Vec<ProducerRecord>,
+}
+
 #[tokio::test]
 async fn kafka_publish() {
     let server = server::http(move |mut req| async move {
@@ -129,16 +135,18 @@ async fn kafka_publish() {
             req_body.extend(&*item.unwrap());
         }
 
-        let req_body: ProducerRecord = serde_json::from_slice(&req_body).unwrap();
+        let req_body: ProduceRequest = serde_json::from_slice(&req_body).unwrap();
         assert_eq!(
             req_body,
-            ProducerRecord {
-                topic: "default:end-device-events".to_string(),
-                headers: vec![],
-                timestamp: None,
-                key: 0,
-                value: b"hi there".to_vec(),
-                partition: 0
+            ProduceRequest {
+                records: vec![ProducerRecord {
+                    topic: "default:end-device-events".to_string(),
+                    headers: vec![],
+                    timestamp: None,
+                    key: 0,
+                    value: b"hi there".to_vec(),
+                    partition: 0
+                }]
             }
         );
 

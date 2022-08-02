@@ -39,6 +39,11 @@ const TOPIC_LABEL: &str = "topic";
 const RETRY_DELAY: Duration = Duration::from_millis(100);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct ProduceRequest {
+    pub records: Vec<ProducerRecord>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct ProduceReply {
     pub offsets: Vec<ProducedOffset>,
 }
@@ -166,7 +171,9 @@ impl CommitLog for KafkaRestCommitLog {
                     .join(&format!("/topics/{}", record.topic))
                     .unwrap(),
             )
-            .json(&record)
+            .json(&ProduceRequest {
+                records: vec![record.clone()],
+            })
             .send()
             .await
         {
