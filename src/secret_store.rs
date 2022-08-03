@@ -1,6 +1,7 @@
-/// Secret store behavior modelled off of the Hashicorp Vault HTTP API,
-/// but that which facilitates various backend implementations (including
-/// those that do not use HTTP).
+//! Secret store behavior modelled off of the Hashicorp Vault HTTP API,
+//! but that which facilitates various backend implementations (including
+//! those that do not use HTTP).
+
 use std::collections::HashMap;
 
 use async_trait::async_trait;
