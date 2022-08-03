@@ -1,6 +1,8 @@
 //! Provides an implementation of the secret store to be used with the
 //! [Hashicorp Vault Api](https://www.vaultproject.io/api-docs).
 
+pub mod args;
+
 use std::{
     sync::{Arc, Once},
     time::Duration,

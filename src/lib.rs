@@ -1,15 +1,47 @@
+//! streambed-rs - Event-driven services toolkit
+//!
+//! Event-driven services
+//!
+//! Event driven microservices promote responsiveness allowing decisions to be made faster. Services also become more resilient to failure as they can quickly rebuild their state by replaying events.
+//!
+//! Efficient
+//!
+//! Streambed based applications are designed to run at the edge on embedded computers as well as in the cloud and so efficient CPU and memory usage are of primary concern.
+//!
+//! Secure
+//!
+//! Security is another primary consideration throughout the design of Streambed. For example, in the world of the Internet of Things, if an individual sensor becomes compromised then its effects can be minimized.
+//!
+//! Built for integration
+//!
+//! Streambed is a toolkit that promotes the consented sharing of data between many third-party applications. No more silos of data. Improved data availability leads to better decision making, which leads to better business.
+//!
+//! Standing on the shoulders of giants, leveraging existing communities
+//!
+//! Streambed is an assemblage of proven approaches and technologies that already have strong communities. Should you have a problem there are many people and resources you can call on.
+//!
+//! Open source and open standards
+//!
+//! Streambed is entirely open source providing cost benefits, fast-time-to-market, the avoidance of vendor lock-in, improved security and more.
+//!
+//! Rust
+//!
+//! Streambed builds on Rust's traits of writing fast and efficient software correctly.
+
+pub mod state_storage;
+
 use std::time::Duration;
 use std::{error::Error, path::Path};
 
 use log::{info, warn};
 use rand::RngCore;
 use reqwest::Certificate;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use tokio::io::AsyncBufReadExt;
 use tokio::time;
 use tokio::{
     fs,
-    io::{self, AsyncReadExt, AsyncWriteExt, BufReader},
+    io::{self, AsyncReadExt, BufReader},
 };
 
 pub mod base64_serde;
@@ -148,47 +180,4 @@ where
         }
     }
     None
-}
-
-/// Loads and deserializes a structure described by T, if the file is present.
-/// If there are IO issues outside of the file not being there, they will be returned
-/// as an error. Beyond IO, state is attempted to be decrypted and deserialized when present.
-/// Any issues there cause the default representation of the structure to be returned. The default
-/// structure is also returned where there is no file present in the first place.
-pub async fn load_struct<T>(
-    state_storage_path: &Path,
-    ss: &impl secret_store::SecretStore,
-    secret_path: &str,
-) -> Result<T, Box<dyn Error>>
-where
-    T: Default + DeserializeOwned,
-{
-    if let Ok(mut f) = fs::File::open(state_storage_path).await {
-        let mut buf = vec![];
-        f.read_to_end(&mut buf).await?;
-        Ok(decrypt_buf(ss, secret_path, &mut buf)
-            .await
-            .unwrap_or_default())
-    } else {
-        Ok(T::default())
-    }
-}
-
-/// Saves an encrypted structure described by T. Any IO errors are returned.
-pub async fn save_struct<T, U>(
-    state_storage_path: &Path,
-    ss: &impl secret_store::SecretStore,
-    secret_path: &str,
-    rng: &mut U,
-    state: &T,
-) -> Result<(), Box<dyn Error>>
-where
-    T: Serialize,
-    U: RngCore,
-{
-    if let Some(buf) = encrypt_struct(ss, secret_path, rng, state).await {
-        let mut f = fs::File::create(state_storage_path).await?;
-        f.write_all(&buf).await?;
-    }
-    Ok(())
 }

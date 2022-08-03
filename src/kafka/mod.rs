@@ -1,5 +1,7 @@
 //! Provides commit log functionality to connect with the Kafka HTTP API
 
+pub mod args;
+
 use std::pin::Pin;
 use std::sync::Once;
 use std::time::Duration;

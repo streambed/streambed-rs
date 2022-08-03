@@ -10,6 +10,7 @@ async-trait = "0.1"
 base64 = "0.13"
 cache_loader_async = { version = "0.2.0", features = ["lru-cache", "ttl-cache"] }
 chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "3.2", features = ["derive", "env"] }
 hex = "0.4"
 humantime = "2.1"
 log = "0.4"
