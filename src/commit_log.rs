@@ -27,7 +27,7 @@ pub struct Header {
 
 /// A declaration of an offset to be committed to a topic.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct Offset {
+pub struct ConsumerOffset {
     pub topic: Topic,
     pub partition: u32,
     pub offset: u64,
@@ -48,7 +48,7 @@ pub struct Subscription {
 /// ending only when the connection to the topic is severed.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Consumer {
-    pub offsets: Option<Vec<Offset>>,
+    pub offsets: Option<Vec<ConsumerOffset>>,
     pub subscriptions: Option<Vec<Subscription>>,
 }
 
@@ -110,7 +110,7 @@ pub trait CommitLog {
     fn scoped_subscribe<'a>(
         &'a self,
         consumer_group_name: &str,
-        offsets: Option<&[Offset]>,
+        offsets: Option<&[ConsumerOffset]>,
         subscriptions: Option<&[Subscription]>,
         idle_timeout: Option<Duration>,
     ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + 'a>>;

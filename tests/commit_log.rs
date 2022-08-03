@@ -23,7 +23,7 @@ async fn kafka_rest_scoped_subscribe() {
         assert_eq!(
             req_body,
             Consumer {
-                offsets: Some(vec!(Offset {
+                offsets: Some(vec!(ConsumerOffset {
                     topic: "default:end-device-events".to_string(),
                     partition: 0,
                     offset: 0,
@@ -81,7 +81,7 @@ async fn kafka_rest_scoped_subscribe() {
 
     let events = cl.scoped_subscribe(
         "farmo-integrator",
-        Some(&[Offset {
+        Some(&[ConsumerOffset {
             topic: "default:end-device-events".to_string(),
             partition: 0,
             offset: 0,

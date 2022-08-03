@@ -16,7 +16,7 @@ use serde::Serialize;
 use tokio::time;
 use tokio_stream::Stream;
 
-use crate::commit_log::Offset;
+use crate::commit_log::ConsumerOffset;
 use crate::commit_log::ProducedOffset;
 use crate::commit_log::ProducerError;
 use crate::commit_log::ProducerRecord;
@@ -98,7 +98,7 @@ impl CommitLog for KafkaRestCommitLog {
     fn scoped_subscribe<'a>(
         &'a self,
         consumer_group_name: &str,
-        offsets: Option<&[Offset]>,
+        offsets: Option<&[ConsumerOffset]>,
         subscriptions: Option<&[Subscription]>,
         idle_timeout: Option<Duration>,
     ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + 'a>> {
