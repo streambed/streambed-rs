@@ -37,12 +37,11 @@ pub struct SecretData {
 pub enum Error {
     /// The secret store is not authenticated.
     Unauthorized,
-    /// The secret store is unavailable at this time. Try later.
-    Unavailable,
 }
 
 /// Describes a secret store modelled on the Hashicorp Vault API,
 /// but one that can be backended with other implementations.
+/// Connections are managed and retried if they cannot be established.
 #[async_trait]
 pub trait SecretStore {
     /// Perform an app authentication given a role and secret. If successful, then the

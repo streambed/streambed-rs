@@ -19,7 +19,10 @@ use reqwest::{Certificate, Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, time::Instant};
 
-use crate::secret_store::{AppRoleAuthReply, Error, GetSecretReply, SecretStore};
+use crate::{
+    delayer::Delayer,
+    secret_store::{AppRoleAuthReply, Error, GetSecretReply, SecretStore},
+};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct AppRoleAuthRequest {
@@ -121,59 +124,64 @@ impl VaultSecretStore {
                 let task_ttl_field = ttl_field.clone();
 
                 async move {
-                    increment_counter!("ss_get_secret_requests", SECRET_PATH_LABEL => secret_path.clone());
+                    let mut delayer = Delayer::new();
+                    loop {
+                        increment_counter!("ss_get_secret_requests", SECRET_PATH_LABEL => secret_path.clone());
 
-                    let mut builder = task_client.get(
-                        task_server
-                            .join(&format!("{}v1/secret/data/{}", task_server, secret_path))
-                            .unwrap(),
-                    );
-                    if let Some(client_token) = task_client_token.lock().await.as_deref() {
-                        builder = builder.header("X-Vault-Token", client_token)
-                    }
+                        let mut builder = task_client.get(
+                            task_server
+                                .join(&format!("{}v1/secret/data/{}", task_server, secret_path))
+                                .unwrap(),
+                        );
+                        if let Some(client_token) = task_client_token.lock().await.as_deref() {
+                            builder = builder.header("X-Vault-Token", client_token)
+                        }
 
-                    let result = builder.send().await;
-                    match result {
-                        Ok(response) => {
-                            if response.status() == StatusCode::FORBIDDEN {
-                                increment_counter!("ss_unauthorized", SECRET_PATH_LABEL => secret_path.clone());
-                                Err(Error::Unauthorized)
-                            } else {
-                                let secret_reply = if response.status().is_success() {
-                                    response.json::<GetSecretReply>().await.ok()
+                        let result = builder.send().await;
+                        match result {
+                            Ok(response) => {
+                                if response.status() == StatusCode::FORBIDDEN {
+                                    increment_counter!("ss_unauthorized", SECRET_PATH_LABEL => secret_path.clone());
+                                    break Err(Error::Unauthorized);
                                 } else {
-                                    debug!(
+                                    let secret_reply = if response.status().is_success() {
+                                        response.json::<GetSecretReply>().await.ok()
+                                    } else {
+                                        debug!(
                                         "Secret store failure status while getting secret: {:?}",
                                         response.status()
                                     );
-                                    increment_counter!("ss_other_reply_failures");
-                                    None
-                                };
-                                let lease_duration = secret_reply.as_ref().map(|sr| {
-                                    let mut lease_duration = None;
-                                    if let Some(ttl_field) = task_ttl_field.as_ref() {
-                                        if let Some(ttl) = sr.data.data.get(ttl_field) {
-                                            if let Ok(ttl_duration) =
-                                                ttl.parse::<humantime::Duration>()
-                                            {
-                                                lease_duration = Some(ttl_duration.into());
+                                        increment_counter!("ss_other_reply_failures");
+                                        None
+                                    };
+                                    let lease_duration = secret_reply.as_ref().map(|sr| {
+                                        let mut lease_duration = None;
+                                        if let Some(ttl_field) = task_ttl_field.as_ref() {
+                                            if let Some(ttl) = sr.data.data.get(ttl_field) {
+                                                if let Ok(ttl_duration) =
+                                                    ttl.parse::<humantime::Duration>()
+                                                {
+                                                    lease_duration = Some(ttl_duration.into());
+                                                }
                                             }
                                         }
-                                    }
-                                    lease_duration
-                                        .unwrap_or_else(|| Duration::from_secs(sr.lease_duration))
-                                });
-                                Ok(secret_reply).with_meta(lease_duration.map(TtlMeta::from))
+                                        lease_duration.unwrap_or_else(|| {
+                                            Duration::from_secs(sr.lease_duration)
+                                        })
+                                    });
+                                    break Ok(secret_reply)
+                                        .with_meta(lease_duration.map(TtlMeta::from));
+                                }
+                            }
+                            Err(e) => {
+                                debug!(
+                                    "Secret store is unavailable while getting secret. Error: {:?}",
+                                    e
+                                );
+                                increment_counter!("ss_unavailables");
                             }
                         }
-                        Err(e) => {
-                            debug!(
-                                "Secret store is unavailable while getting secret. Error: {:?}",
-                                e
-                            );
-                            increment_counter!("ss_unavailables");
-                            Err(Error::Unavailable)
-                        }
+                        delayer.delay().await;
                     }
                 }
             },
@@ -198,58 +206,59 @@ impl SecretStore for VaultSecretStore {
         role_id: &str,
         secret_id: &str,
     ) -> Result<AppRoleAuthReply, Error> {
-        let role_id = role_id.to_string();
+        loop {
+            let role_id = role_id.to_string();
 
-        increment_counter!("ss_approle_auth_requests", APPROLE_AUTH_LABEL => role_id.clone());
+            increment_counter!("ss_approle_auth_requests", APPROLE_AUTH_LABEL => role_id.clone());
 
-        let task_client_token = Arc::clone(&self.client_token);
-        let result = self
-            .client
-            .put(
-                self.server
-                    .join(&format!("{}v1/auth/approle/login", self.server))
-                    .unwrap(),
-            )
-            .json(&AppRoleAuthRequest {
-                role_id: role_id.to_string(),
-                secret_id: secret_id.to_string(),
-            })
-            .send()
-            .await;
-        match result {
-            Ok(response) => {
-                if response.status() == StatusCode::FORBIDDEN {
-                    increment_counter!("ss_unauthorized", APPROLE_AUTH_LABEL => role_id.clone());
-                    Err(Error::Unauthorized)
-                } else {
-                    let secret_reply = if response.status().is_success() {
-                        let approle_auth_reply = response
-                            .json::<AppRoleAuthReply>()
-                            .await
-                            .map_err(|_| Error::Unauthorized);
-                        if let Ok(r) = &approle_auth_reply {
-                            let mut client_token = task_client_token.lock().await;
-                            *client_token = Some(r.auth.client_token.clone());
-                        }
-                        approle_auth_reply
+            let task_client_token = Arc::clone(&self.client_token);
+            let result = self
+                .client
+                .put(
+                    self.server
+                        .join(&format!("{}v1/auth/approle/login", self.server))
+                        .unwrap(),
+                )
+                .json(&AppRoleAuthRequest {
+                    role_id: role_id.to_string(),
+                    secret_id: secret_id.to_string(),
+                })
+                .send()
+                .await;
+            match result {
+                Ok(response) => {
+                    if response.status() == StatusCode::FORBIDDEN {
+                        increment_counter!("ss_unauthorized", APPROLE_AUTH_LABEL => role_id.clone());
+                        break Err(Error::Unauthorized);
                     } else {
-                        debug!(
-                            "Secret store failure status while authenticating: {:?}",
-                            response.status()
-                        );
-                        increment_counter!("ss_other_reply_failures", APPROLE_AUTH_LABEL => role_id.clone());
-                        Err(Error::Unauthorized)
-                    };
-                    secret_reply
+                        let secret_reply = if response.status().is_success() {
+                            let approle_auth_reply = response
+                                .json::<AppRoleAuthReply>()
+                                .await
+                                .map_err(|_| Error::Unauthorized);
+                            if let Ok(r) = &approle_auth_reply {
+                                let mut client_token = task_client_token.lock().await;
+                                *client_token = Some(r.auth.client_token.clone());
+                            }
+                            approle_auth_reply
+                        } else {
+                            debug!(
+                                "Secret store failure status while authenticating: {:?}",
+                                response.status()
+                            );
+                            increment_counter!("ss_other_reply_failures", APPROLE_AUTH_LABEL => role_id.clone());
+                            Err(Error::Unauthorized)
+                        };
+                        break secret_reply;
+                    }
                 }
-            }
-            Err(e) => {
-                debug!(
-                    "Secret store is unavailable while authenticating. Error: {:?}",
-                    e
-                );
-                increment_counter!("ss_unavailables");
-                Err(Error::Unavailable)
+                Err(e) => {
+                    debug!(
+                        "Secret store is unavailable while authenticating. Error: {:?}",
+                        e
+                    );
+                    increment_counter!("ss_unavailables");
+                }
             }
         }
     }

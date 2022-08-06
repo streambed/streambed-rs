@@ -198,3 +198,47 @@ async fn kafka_publish() {
     let result = cl.produce(&record).await.unwrap();
     assert_eq!(result.offset, 100);
 }
+
+#[tokio::test]
+async fn kafka_offsets() {
+    let server = server::http(move |req| async move {
+        assert_eq!(
+            req.uri(),
+            "/topics/default:end-device-events/partitions/0/offsets"
+        );
+
+        let body = r#"
+        {
+            "beginning_offset": 0,
+            "end_offset": 1
+        }          
+        "#;
+
+        http::Response::new(body.into())
+    });
+
+    let server_addr = server.addr();
+
+    let cl = KafkaRestCommitLog::new(
+        &Url::parse(&format!(
+            "http://{}:{}",
+            server_addr.ip(),
+            server_addr.port()
+        ))
+        .unwrap(),
+        None,
+        false,
+    );
+
+    let result = cl
+        .offsets(&"default:end-device-events".to_string(), 0)
+        .await
+        .unwrap();
+    assert_eq!(
+        result,
+        PartitionOffsets {
+            beginning_offset: 0,
+            end_offset: 1,
+        }
+    );
+}
