@@ -30,6 +30,8 @@
 
 pub mod state_storage;
 
+mod delayer;
+
 use std::time::Duration;
 use std::{error::Error, path::Path};
 

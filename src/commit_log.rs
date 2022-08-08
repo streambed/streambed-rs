@@ -65,6 +65,13 @@ pub struct ConsumerRecord {
     pub offset: u64,
 }
 
+/// The reply to an offsets request
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct PartitionOffsets {
+    pub beginning_offset: u64,
+    pub end_offset: u64,
+}
+
 /// A declaration of a record produced by a subscription
 #[derive(Clone, Deserialize, Debug, PartialEq, Serialize)]
 pub struct ProducerRecord {
@@ -88,25 +95,23 @@ pub struct ProducedOffset {
 pub enum ProducerError {
     /// The commit log received the request but was unable to process it.
     CannotProduce,
-    /// The commit log is unavailable at this time. Try later.
-    Unavailable,
 }
 
 /// A commit log holds topics and can be appended to and tailed.
+/// Connections are managed and retried if they cannot be established.
 #[async_trait]
 pub trait CommitLog {
+    /// Retrieve the current offsets of a topic if they are present.
+    async fn offsets(&self, topic: &Topic, partition: u32) -> Option<PartitionOffsets>;
+
+    /// Publish a record and return the offset that was assigned.
+    async fn produce(&self, record: &ProducerRecord) -> Result<ProducedOffset, ProducerError>;
+
     /// Subscribe to one or more topics for a given consumer group
-    /// having committed zero or more topics. Connections are
-    /// retried if they cannot be established, or become lost.
-    /// Once a connection is established then records are streamed
+    /// having committed zero or more topics. The records are streamed
     /// back indefinitely unless an idle timeout argument is provided.
     /// In the case of an idle timeout, if no record is received
     /// within that period, None is returned to end the stream.
-    // NOTE: It'd be great to use the async_trait macro here, but
-    // that only supports futures, not streams. Even better,
-    // it'd be great to have `impl Stream` available here and
-    // in other places where we are using the async_trait macro.
-    // Rust ain't there yet though.
     fn scoped_subscribe<'a>(
         &'a self,
         consumer_group_name: &str,
@@ -114,7 +119,4 @@ pub trait CommitLog {
         subscriptions: Option<&[Subscription]>,
         idle_timeout: Option<Duration>,
     ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + 'a>>;
-
-    /// Publish a record and return the offset that was assigned.
-    async fn produce(&self, record: &ProducerRecord) -> Result<ProducedOffset, ProducerError>;
 }

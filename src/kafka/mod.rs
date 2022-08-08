@@ -6,6 +6,17 @@ use std::pin::Pin;
 use std::sync::Once;
 use std::time::Duration;
 
+use super::commit_log::CommitLog;
+use super::commit_log::Consumer;
+use super::commit_log::ConsumerRecord;
+use super::commit_log::Subscription;
+use super::delayer::Delayer;
+use crate::commit_log::ConsumerOffset;
+use crate::commit_log::PartitionOffsets;
+use crate::commit_log::ProducedOffset;
+use crate::commit_log::ProducerError;
+use crate::commit_log::ProducerRecord;
+use crate::commit_log::Topic;
 use async_stream::stream;
 use async_trait::async_trait;
 use log::{debug, trace};
@@ -18,16 +29,6 @@ use serde::Serialize;
 use tokio::time;
 use tokio_stream::Stream;
 
-use crate::commit_log::ConsumerOffset;
-use crate::commit_log::ProducedOffset;
-use crate::commit_log::ProducerError;
-use crate::commit_log::ProducerRecord;
-
-use super::commit_log::CommitLog;
-use super::commit_log::Consumer;
-use super::commit_log::ConsumerRecord;
-use super::commit_log::Subscription;
-
 static INIT: Once = Once::new();
 
 /// A commit log holds topics and can be appended to and tailed.
@@ -38,7 +39,6 @@ pub struct KafkaRestCommitLog {
 
 const CONSUMER_GROUP_NAME_LABEL: &str = "consumer_group_name";
 const TOPIC_LABEL: &str = "topic";
-const RETRY_DELAY: Duration = Duration::from_millis(100);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct ProduceRequest {
@@ -61,6 +61,15 @@ impl KafkaRestCommitLog {
             describe_counter!(
                 "consumer_group_request_failures",
                 "number of consumer group request failures"
+            );
+            describe_counter!("offset_replies", "number of successful offset replies");
+            describe_counter!(
+                "offset_other_reply_failures",
+                "number of offset request failures"
+            );
+            describe_counter!(
+                "offset_unavailables",
+                "number of times the offsets is unavailable/offline"
             );
             describe_counter!("producer_replies", "number of successful producer replies");
             describe_counter!(
@@ -90,6 +99,99 @@ impl KafkaRestCommitLog {
 
 #[async_trait]
 impl CommitLog for KafkaRestCommitLog {
+    async fn offsets(&self, topic: &Topic, partition: u32) -> Option<PartitionOffsets> {
+        let mut delayer = Delayer::new();
+        loop {
+            match self
+                .client
+                .post(
+                    self.server
+                        .join(&format!(
+                            "/topics/{}/partitions/{}/offsets",
+                            topic, partition
+                        ))
+                        .unwrap(),
+                )
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        trace!("Retrieved offsets for: {} {}", topic, partition);
+                        increment_counter!("offset_replies",  TOPIC_LABEL => topic.to_string());
+                        break response.json::<PartitionOffsets>().await.ok();
+                    } else {
+                        debug!(
+                            "Commit log failure status while retrieving offsets: {:?}",
+                            response.status()
+                        );
+                        increment_counter!("offsets_other_reply_failures");
+                        break None;
+                    }
+                }
+                Err(e) => {
+                    debug!(
+                        "Commit log is unavailable while retrieving offsets. Error: {:?}",
+                        e
+                    );
+                    increment_counter!("offsets_unavailables");
+                }
+            }
+            delayer.delay().await;
+        }
+    }
+
+    async fn produce(&self, record: &ProducerRecord) -> Result<ProducedOffset, ProducerError> {
+        let mut delayer = Delayer::new();
+        loop {
+            match self
+                .client
+                .post(
+                    self.server
+                        .join(&format!("/topics/{}", record.topic))
+                        .unwrap(),
+                )
+                .json(&ProduceRequest {
+                    records: vec![record.clone()],
+                })
+                .send()
+                .await
+            {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        trace!("Produced record: {:?}", record);
+                        increment_counter!("producer_replies",  TOPIC_LABEL => record.topic.to_owned());
+                        break response
+                            .json::<ProduceReply>()
+                            .await
+                            .map_err(|_| ProducerError::CannotProduce)
+                            .and_then(|r| {
+                                r.offsets.first().map(|o| o.to_owned()).ok_or_else(|| {
+                                    debug!(
+                                        "Commit log failure reply with no offset while producing"
+                                    );
+                                    increment_counter!("producer_other_reply_failures");
+                                    ProducerError::CannotProduce
+                                })
+                            });
+                    } else {
+                        debug!(
+                            "Commit log failure status while producing: {:?}",
+                            response.status()
+                        );
+                        increment_counter!("producer_other_reply_failures");
+                        break Err(ProducerError::CannotProduce);
+                    }
+                }
+                Err(e) => {
+                    debug!("Commit log is unavailable while producing. Error: {:?}", e);
+                    increment_counter!("producer_unavailables");
+                }
+            }
+            delayer.delay().await;
+        }
+    }
+
     /// Subscribe to one or more topics for a given consumer group
     /// having committed zero or more topics. Connections are
     /// retried if they cannot be established, or become lost.
@@ -119,6 +221,7 @@ impl CommitLog for KafkaRestCommitLog {
             .json(&consumer);
 
         Box::pin(stream! {
+            let mut delayer = Delayer::new();
             'stream_loop: loop {
                 increment_counter!("consumer_group_requests", CONSUMER_GROUP_NAME_LABEL => consumer_group_name.to_string());
                 let response = request.try_clone().unwrap().send().await;
@@ -160,54 +263,8 @@ impl CommitLog for KafkaRestCommitLog {
                         increment_counter!("consumer_group_request_failures", CONSUMER_GROUP_NAME_LABEL => consumer_group_name.to_string());
                     }
                 }
-                time::sleep(RETRY_DELAY).await;
+                delayer.delay().await;
             }
         })
-    }
-
-    async fn produce(&self, record: &ProducerRecord) -> Result<ProducedOffset, ProducerError> {
-        match self
-            .client
-            .post(
-                self.server
-                    .join(&format!("/topics/{}", record.topic))
-                    .unwrap(),
-            )
-            .json(&ProduceRequest {
-                records: vec![record.clone()],
-            })
-            .send()
-            .await
-        {
-            Ok(response) => {
-                if response.status().is_success() {
-                    trace!("Produced record: {:?}", record);
-                    increment_counter!("producer_replies",  TOPIC_LABEL => record.topic.to_owned());
-                    response
-                        .json::<ProduceReply>()
-                        .await
-                        .map_err(|_| ProducerError::CannotProduce)
-                        .and_then(|r| {
-                            r.offsets.first().map(|o| o.to_owned()).ok_or_else(|| {
-                                debug!("Commit log failure reply with no offset while producing");
-                                increment_counter!("producer_other_reply_failures");
-                                ProducerError::CannotProduce
-                            })
-                        })
-                } else {
-                    debug!(
-                        "Commit log failure status while producing: {:?}",
-                        response.status()
-                    );
-                    increment_counter!("producer_other_reply_failures");
-                    Err(ProducerError::CannotProduce)
-                }
-            }
-            Err(e) => {
-                debug!("Commit log is unavailable while producing. Error: {:?}", e);
-                increment_counter!("producer_unavailables");
-                Err(ProducerError::Unavailable)
-            }
-        }
     }
 }
