@@ -249,7 +249,7 @@ impl CommitLog for KafkaRestCommitLog {
                                 }
                                 Ok(None) => {
                                     debug!("Unable to receive chunk");
-                                    break 'stream_loop;
+                                    continue 'stream_loop;
                                 }
                                 Err(e) => debug!("Error receiving chunk {:?}", e),
                             }
