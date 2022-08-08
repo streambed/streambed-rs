@@ -2,6 +2,7 @@
 
 pub mod args;
 
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Once;
 use std::time::Duration;
@@ -49,6 +50,8 @@ struct ProduceRequest {
 struct ProduceReply {
     pub offsets: Vec<ProducedOffset>,
 }
+
+type OffsetMap = HashMap<(Topic, u32), u64>;
 
 impl KafkaRestCommitLog {
     /// Establish a new commit log session.
@@ -203,58 +206,79 @@ impl CommitLog for KafkaRestCommitLog {
         &'a self,
         consumer_group_name: &str,
         offsets: Option<&[ConsumerOffset]>,
-        subscriptions: Option<&[Subscription]>,
+        subscriptions: &[Subscription],
         idle_timeout: Option<Duration>,
     ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + 'a>> {
-        let consumer = Consumer {
-            offsets: offsets.map(|e| e.iter().map(|e| e.to_owned()).collect()),
-            subscriptions: subscriptions.map(|e| e.iter().map(|e| e.to_owned()).collect()),
-        };
         let consumer_group_name = consumer_group_name.to_string();
-        let request = self
-            .client
-            .post(
-                self.server
-                    .join(&format!("/consumers/{}", consumer_group_name))
-                    .unwrap(),
-            )
-            .json(&consumer);
-
-        Box::pin(stream! {
+        let mut offsets: Option<OffsetMap> = offsets.map(|e| {
+            e.iter()
+                .map(|e| ((e.topic.to_owned(), e.partition), e.offset))
+                .collect::<OffsetMap>()
+        });
+        let subscriptions: Vec<Subscription> = subscriptions.iter().map(|e| e.to_owned()).collect();
+        Box::pin(stream!({
             let mut delayer = Delayer::new();
             'stream_loop: loop {
                 increment_counter!("consumer_group_requests", CONSUMER_GROUP_NAME_LABEL => consumer_group_name.to_string());
-                let response = request.try_clone().unwrap().send().await;
+                let consumer = Consumer {
+                    offsets: offsets.clone().map(|e| {
+                        e.iter()
+                            .map(|((topic, partition), offset)| ConsumerOffset {
+                                offset: *offset,
+                                partition: *partition,
+                                topic: topic.to_string(),
+                            })
+                            .collect()
+                    }),
+                    subscriptions: subscriptions.clone(),
+                };
+                let response = self
+                    .client
+                    .post(
+                        self.server
+                            .join(&format!("/consumers/{}", consumer_group_name))
+                            .unwrap(),
+                    )
+                    .json(&consumer)
+                    .send()
+                    .await;
                 match response {
-                    Ok(mut r) => {
-                        loop {
-                            let chunk = if let Some(it) = idle_timeout {
-                                match time::timeout(it, r.chunk()).await {
-                                    Ok(c) => c,
-                                    Err(_) => break 'stream_loop,
-                                }
-                            } else {
-                                r.chunk().await
-                            };
-                            match chunk {
-                                Ok(Some(c)) => {
-                                    if let Ok(record) = serde_json::from_slice(&c) {
-                                        trace!("Received record: {:?}", record);
-                                        let topic = (&record as &ConsumerRecord).topic.to_owned();
-                                        increment_counter!("consumer_group_replies", CONSUMER_GROUP_NAME_LABEL => consumer_group_name.to_string(), TOPIC_LABEL => topic);
-                                        yield record;
-                                    } else {
-                                        debug!("Unable to decode record");
-                                    }
-                                }
-                                Ok(None) => {
-                                    debug!("Unable to receive chunk");
-                                    continue 'stream_loop;
-                                }
-                                Err(e) => debug!("Error receiving chunk {:?}", e),
+                    Ok(mut r) => loop {
+                        let chunk = if let Some(it) = idle_timeout {
+                            match time::timeout(it, r.chunk()).await {
+                                Ok(c) => c,
+                                Err(_) => break 'stream_loop,
                             }
+                        } else {
+                            r.chunk().await
+                        };
+                        match chunk {
+                            Ok(Some(c)) => {
+                                if let Ok(record) = serde_json::from_slice::<ConsumerRecord>(&c) {
+                                    trace!("Received record: {:?}", record);
+                                    let topic = record.topic.to_owned();
+                                    let partition = record.partition;
+                                    let record_offset = record.offset;
+                                    increment_counter!("consumer_group_replies", CONSUMER_GROUP_NAME_LABEL => consumer_group_name.to_string(), TOPIC_LABEL => topic.clone());
+                                    yield record;
+
+                                    if let Some(offsets) = &mut offsets {
+                                        if let Some(offset) = offsets.get_mut(&(topic, partition)) {
+                                            *offset = record_offset;
+                                        }
+                                    }
+                                } else {
+                                    debug!("Unable to decode record");
+                                }
+                            }
+                            Ok(None) => {
+                                debug!("Unable to receive chunk");
+                                delayer = Delayer::new();
+                                continue 'stream_loop;
+                            }
+                            Err(e) => debug!("Error receiving chunk {:?}", e),
                         }
-                    }
+                    },
                     Err(e) => {
                         debug!(
                             "Commit log is unavailable while subscribing. Error: {:?}",
@@ -265,6 +289,6 @@ impl CommitLog for KafkaRestCommitLog {
                 }
                 delayer.delay().await;
             }
-        })
+        }))
     }
 }

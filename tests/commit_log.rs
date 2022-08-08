@@ -5,6 +5,7 @@ use std::{convert::Infallible, time::Duration};
 use serde::Deserialize;
 use support::*;
 
+use async_stream::stream;
 use reqwest::Url;
 use streambed::{commit_log::*, kafka::KafkaRestCommitLog};
 use tokio_stream::StreamExt;
@@ -28,14 +29,14 @@ async fn kafka_rest_scoped_subscribe() {
                     partition: 0,
                     offset: 0,
                 })),
-                subscriptions: Some(vec!(Subscription {
+                subscriptions: vec!(Subscription {
                     topic: "default:end-device-events".to_string()
-                })),
+                }),
             }
         );
 
-        let chunks = vec![
-            ConsumerRecord {
+        let stream = stream! {
+            yield Result::<_, Infallible>::Ok(serde_json::to_vec(&ConsumerRecord {
                 topic: "default:end-device-events".to_string(),
                 headers: vec![],
                 timestamp: None,
@@ -43,8 +44,9 @@ async fn kafka_rest_scoped_subscribe() {
                 value: b"hi there".to_vec(),
                 partition: 0,
                 offset: 1,
-            },
-            ConsumerRecord {
+            }).unwrap());
+
+            yield Result::<_, Infallible>::Ok(serde_json::to_vec(&ConsumerRecord {
                 topic: "default:end-device-events".to_string(),
                 headers: vec![],
                 timestamp: None,
@@ -52,14 +54,10 @@ async fn kafka_rest_scoped_subscribe() {
                 value: b"hi there again".to_vec(),
                 partition: 0,
                 offset: 2,
-            },
-        ];
+            }).unwrap());
 
-        let stream = tokio_stream::iter(
-            chunks
-                .into_iter()
-                .map(|e| Result::<_, Infallible>::Ok(serde_json::to_vec(&e).unwrap())),
-        );
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        };
 
         let body = hyper::Body::wrap_stream(stream);
 
@@ -86,9 +84,9 @@ async fn kafka_rest_scoped_subscribe() {
             partition: 0,
             offset: 0,
         }]),
-        Some(&[Subscription {
+        &[Subscription {
             topic: "default:end-device-events".to_string(),
-        }]),
+        }],
         Some(Duration::from_millis(100)),
     );
     tokio::pin!(events);

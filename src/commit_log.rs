@@ -49,7 +49,7 @@ pub struct Subscription {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Consumer {
     pub offsets: Option<Vec<ConsumerOffset>>,
-    pub subscriptions: Option<Vec<Subscription>>,
+    pub subscriptions: Vec<Subscription>,
 }
 
 /// A declaration of a record produced by a subscription
@@ -116,7 +116,7 @@ pub trait CommitLog {
         &'a self,
         consumer_group_name: &str,
         offsets: Option<&[ConsumerOffset]>,
-        subscriptions: Option<&[Subscription]>,
+        subscriptions: &[Subscription],
         idle_timeout: Option<Duration>,
     ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + 'a>>;
 }
