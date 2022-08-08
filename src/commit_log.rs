@@ -56,7 +56,7 @@ pub struct Consumer {
 #[derive(Clone, Deserialize, Debug, PartialEq, Serialize)]
 pub struct ConsumerRecord {
     pub topic: Topic,
-    pub headers: Vec<Header>,
+    pub headers: Option<Vec<Header>>,
     pub timestamp: Option<DateTime<Utc>>,
     pub key: u64,
     #[serde(with = "base64_serde")]
