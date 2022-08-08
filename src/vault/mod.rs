@@ -148,9 +148,9 @@ impl VaultSecretStore {
                                         response.json::<GetSecretReply>().await.ok()
                                     } else {
                                         debug!(
-                                        "Secret store failure status while getting secret: {:?}",
-                                        response.status()
-                                    );
+                                            "Secret store failure status while getting secret: {:?}",
+                                            response.status()
+                                        );
                                         increment_counter!("ss_other_reply_failures");
                                         None
                                     };
