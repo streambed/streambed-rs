@@ -104,7 +104,7 @@ impl CommitLog for KafkaRestCommitLog {
         loop {
             match self
                 .client
-                .post(
+                .get(
                     self.server
                         .join(&format!(
                             "/topics/{}/partitions/{}/offsets",
