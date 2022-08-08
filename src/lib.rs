@@ -80,12 +80,12 @@ pub async fn authenticate_secret_store(
     ss: impl secret_store::SecretStore + Sync + Send + Clone + 'static,
     role_id: &str,
     secret_id: &str,
-    unauthenticated_timeout: &Duration,
+    unauthenticated_timeout: Duration,
 ) {
     let mut approle_auth_reply = ss.approle_auth(role_id, secret_id).await;
     let auth_role_id = role_id.to_string();
     let auth_secret_id = secret_id.to_string();
-    let auth_unauthenticated_timeout = *unauthenticated_timeout;
+    let auth_unauthenticated_timeout = unauthenticated_timeout;
     tokio::spawn(async move {
         let mut never_reported_info = true;
         let mut never_reported_warn = true;

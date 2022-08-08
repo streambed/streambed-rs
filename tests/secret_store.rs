@@ -105,7 +105,7 @@ async fn get_http_vault_secret_with_auth() {
     let server_addr = server.addr();
 
     let cl = VaultSecretStore::new(
-        &Url::parse(&format!(
+        Url::parse(&format!(
             "http://{}:{}",
             server_addr.ip(),
             server_addr.port()
@@ -113,7 +113,7 @@ async fn get_http_vault_secret_with_auth() {
         .unwrap(),
         None,
         false,
-        &Duration::from_secs(60),
+        Duration::from_secs(60),
         1,
         Some("ttl"),
     );
