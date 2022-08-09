@@ -55,7 +55,7 @@ type OffsetMap = HashMap<(Topic, u32), u64>;
 
 impl KafkaRestCommitLog {
     /// Establish a new commit log session.
-    pub fn new(server: &Url, server_cert: Option<&Certificate>, tls_insecure: bool) -> Self {
+    pub fn new(server: Url, server_cert: Option<Certificate>, tls_insecure: bool) -> Self {
         INIT.call_once(|| {
             describe_counter!(
                 "consumer_group_requests",
@@ -88,21 +88,21 @@ impl KafkaRestCommitLog {
         let client = Client::builder().danger_accept_invalid_certs(tls_insecure);
 
         let client = if let Some(cert) = server_cert {
-            client.add_root_certificate(cert.clone())
+            client.add_root_certificate(cert)
         } else {
             client
         };
 
         Self {
             client: client.build().unwrap(),
-            server: server.clone(),
+            server,
         }
     }
 }
 
 #[async_trait]
 impl CommitLog for KafkaRestCommitLog {
-    async fn offsets(&self, topic: &Topic, partition: u32) -> Option<PartitionOffsets> {
+    async fn offsets(&self, topic: Topic, partition: u32) -> Option<PartitionOffsets> {
         let mut delayer = Delayer::new();
         loop {
             match self
@@ -121,7 +121,7 @@ impl CommitLog for KafkaRestCommitLog {
                 Ok(response) => {
                     if response.status().is_success() {
                         trace!("Retrieved offsets for: {} {}", topic, partition);
-                        increment_counter!("offset_replies",  TOPIC_LABEL => topic.to_string());
+                        increment_counter!("offset_replies",  TOPIC_LABEL => topic);
                         break response.json::<PartitionOffsets>().await.ok();
                     } else {
                         debug!(
@@ -144,7 +144,7 @@ impl CommitLog for KafkaRestCommitLog {
         }
     }
 
-    async fn produce(&self, record: &ProducerRecord) -> Result<ProducedOffset, ProducerError> {
+    async fn produce(&self, record: ProducerRecord) -> Result<ProducedOffset, ProducerError> {
         let mut delayer = Delayer::new();
         loop {
             match self
@@ -205,8 +205,8 @@ impl CommitLog for KafkaRestCommitLog {
     fn scoped_subscribe<'a>(
         &'a self,
         consumer_group_name: &str,
-        offsets: Option<&[ConsumerOffset]>,
-        subscriptions: &[Subscription],
+        offsets: Option<Vec<ConsumerOffset>>,
+        subscriptions: Vec<Subscription>,
         idle_timeout: Option<Duration>,
     ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + 'a>> {
         let consumer_group_name = consumer_group_name.to_string();

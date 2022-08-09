@@ -102,10 +102,10 @@ pub enum ProducerError {
 #[async_trait]
 pub trait CommitLog {
     /// Retrieve the current offsets of a topic if they are present.
-    async fn offsets(&self, topic: &Topic, partition: u32) -> Option<PartitionOffsets>;
+    async fn offsets(&self, topic: Topic, partition: u32) -> Option<PartitionOffsets>;
 
     /// Publish a record and return the offset that was assigned.
-    async fn produce(&self, record: &ProducerRecord) -> Result<ProducedOffset, ProducerError>;
+    async fn produce(&self, record: ProducerRecord) -> Result<ProducedOffset, ProducerError>;
 
     /// Subscribe to one or more topics for a given consumer group
     /// having committed zero or more topics. The records are streamed
@@ -115,8 +115,8 @@ pub trait CommitLog {
     fn scoped_subscribe<'a>(
         &'a self,
         consumer_group_name: &str,
-        offsets: Option<&[ConsumerOffset]>,
-        subscriptions: &[Subscription],
+        offsets: Option<Vec<ConsumerOffset>>,
+        subscriptions: Vec<Subscription>,
         idle_timeout: Option<Duration>,
     ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + 'a>>;
 }

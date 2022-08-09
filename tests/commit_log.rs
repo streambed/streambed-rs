@@ -67,7 +67,7 @@ async fn kafka_rest_scoped_subscribe() {
     let server_addr = server.addr();
 
     let cl = KafkaRestCommitLog::new(
-        &Url::parse(&format!(
+        Url::parse(&format!(
             "http://{}:{}",
             server_addr.ip(),
             server_addr.port()
@@ -79,12 +79,12 @@ async fn kafka_rest_scoped_subscribe() {
 
     let events = cl.scoped_subscribe(
         "farmo-integrator",
-        Some(&[ConsumerOffset {
+        Some(vec![ConsumerOffset {
             topic: "default:end-device-events".to_string(),
             partition: 0,
             offset: 0,
         }]),
-        &[Subscription {
+        vec![Subscription {
             topic: "default:end-device-events".to_string(),
         }],
         Some(Duration::from_millis(100)),
@@ -175,7 +175,7 @@ async fn kafka_publish() {
     let server_addr = server.addr();
 
     let cl = KafkaRestCommitLog::new(
-        &Url::parse(&format!(
+        Url::parse(&format!(
             "http://{}:{}",
             server_addr.ip(),
             server_addr.port()
@@ -193,7 +193,7 @@ async fn kafka_publish() {
         value: b"hi there".to_vec(),
         partition: 0,
     };
-    let result = cl.produce(&record).await.unwrap();
+    let result = cl.produce(record).await.unwrap();
     assert_eq!(result.offset, 100);
 }
 
@@ -218,7 +218,7 @@ async fn kafka_offsets() {
     let server_addr = server.addr();
 
     let cl = KafkaRestCommitLog::new(
-        &Url::parse(&format!(
+        Url::parse(&format!(
             "http://{}:{}",
             server_addr.ip(),
             server_addr.port()
@@ -229,7 +229,7 @@ async fn kafka_offsets() {
     );
 
     let result = cl
-        .offsets(&"default:end-device-events".to_string(), 0)
+        .offsets("default:end-device-events".to_string(), 0)
         .await
         .unwrap();
     assert_eq!(

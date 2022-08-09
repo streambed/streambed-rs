@@ -63,10 +63,10 @@ impl VaultSecretStore {
     /// requested again.
     /// A max_secrets_cached arg limits the number of secrets that can be held at any time.
     pub fn new(
-        server: &Url,
-        server_cert: Option<&Certificate>,
+        server: Url,
+        server_cert: Option<Certificate>,
         tls_insecure: bool,
-        unauthorized_timeout: &Duration,
+        unauthorized_timeout: Duration,
         max_secrets_cached: usize,
         ttl_field: Option<&str>,
     ) -> Self {
@@ -96,7 +96,7 @@ impl VaultSecretStore {
         let client = Client::builder().danger_accept_invalid_certs(tls_insecure);
 
         let client = if let Some(cert) = server_cert {
-            client.add_root_certificate(cert.clone())
+            client.add_root_certificate(cert)
         } else {
             client
         };
@@ -105,7 +105,6 @@ impl VaultSecretStore {
         let retained_client_token = Arc::clone(&client_token);
 
         let client = client.build().unwrap();
-        let server = server.clone();
         let ttl_field = ttl_field.map(|s| s.to_string());
 
         let retained_client = client.clone();
@@ -113,7 +112,7 @@ impl VaultSecretStore {
 
         let cache: TtlCache = LoadingCache::with_meta_loader(
             TtlCacheBacking::with_backing(
-                *unauthorized_timeout,
+                unauthorized_timeout,
                 LruCacheBacking::new(max_secrets_cached),
             ),
             move |secret_path| {
