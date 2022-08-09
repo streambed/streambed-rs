@@ -210,18 +210,20 @@ impl CommitLog for KafkaRestCommitLog {
         idle_timeout: Option<Duration>,
     ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + 'a>> {
         let consumer_group_name = consumer_group_name.to_string();
-        let mut offsets: Option<OffsetMap> = offsets.map(|e| {
-            e.iter()
-                .map(|e| ((e.topic.to_owned(), e.partition), e.offset))
-                .collect::<OffsetMap>()
-        });
+        let mut offsets: OffsetMap = offsets
+            .map(|e| {
+                e.iter()
+                    .map(|e| ((e.topic.to_owned(), e.partition), e.offset))
+                    .collect::<OffsetMap>()
+            })
+            .unwrap_or_default();
         let subscriptions: Vec<Subscription> = subscriptions.iter().map(|e| e.to_owned()).collect();
         Box::pin(stream!({
             let mut delayer = Delayer::new();
             'stream_loop: loop {
                 increment_counter!("consumer_group_requests", CONSUMER_GROUP_NAME_LABEL => consumer_group_name.to_string());
                 let consumer = Consumer {
-                    offsets: offsets.clone().map(|e| {
+                    offsets: Some(offsets.clone()).map(|e| {
                         e.iter()
                             .map(|((topic, partition), offset)| ConsumerOffset {
                                 offset: *offset,
@@ -262,11 +264,7 @@ impl CommitLog for KafkaRestCommitLog {
                                     increment_counter!("consumer_group_replies", CONSUMER_GROUP_NAME_LABEL => consumer_group_name.to_string(), TOPIC_LABEL => topic.clone());
                                     yield record;
 
-                                    if let Some(offsets) = &mut offsets {
-                                        if let Some(offset) = offsets.get_mut(&(topic, partition)) {
-                                            *offset = record_offset;
-                                        }
-                                    }
+                                    let _ = offsets.insert((topic, partition), record_offset);
                                 } else {
                                     debug!("Unable to decode record");
                                 }
