@@ -1,3 +1,5 @@
+//! Helpers to encrypt and decrypt things, particularly message payloads.
+
 use aes::{
     cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit},
     Aes128,

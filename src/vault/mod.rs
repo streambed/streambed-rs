@@ -1,12 +1,9 @@
 //! Provides an implementation of the secret store to be used with the
-//! [Hashicorp Vault Api](https://www.vaultproject.io/api-docs).
+//! [Hashicorp Vault API](https://www.vaultproject.io/api-docs).
 
 pub mod args;
 
-use std::{
-    sync::{Arc, Once},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use cache_loader_async::{
@@ -14,7 +11,7 @@ use cache_loader_async::{
     cache_api::{CacheEntry, LoadingCache, WithMeta},
 };
 use log::debug;
-use metrics::{describe_counter, increment_counter};
+use metrics::increment_counter;
 use reqwest::{Certificate, Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, time::Instant};
@@ -53,8 +50,6 @@ pub struct VaultSecretStore {
 const APPROLE_AUTH_LABEL: &str = "approle_auth";
 const SECRET_PATH_LABEL: &str = "secret_path";
 
-static INIT: Once = Once::new();
-
 impl VaultSecretStore {
     /// Establish a new client to Hashicorp Vault. In the case where TLS is required,
     /// a root certificate may be provided e.g. when using self-signed certificates. TLS
@@ -70,29 +65,6 @@ impl VaultSecretStore {
         max_secrets_cached: usize,
         ttl_field: Option<&str>,
     ) -> Self {
-        INIT.call_once(|| {
-            describe_counter!(
-                "ss_approle_auth_requests",
-                "number of secret server approle auth requests"
-            );
-            describe_counter!(
-                "ss_get_secret_requests",
-                "number of secret server get secret requests"
-            );
-            describe_counter!(
-                "ss_other_reply_failures",
-                "number of get secret reply failures outside of being unauthorized"
-            );
-            describe_counter!(
-                "ss_unavailables",
-                "number of times the secret server is unavailable/offline"
-            );
-            describe_counter!(
-                "ss_unauthorized",
-                "number of secret server authorization failures"
-            );
-        });
-
         let client = Client::builder().danger_accept_invalid_certs(tls_insecure);
 
         let client = if let Some(cert) = server_cert {

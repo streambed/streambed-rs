@@ -4,7 +4,6 @@ pub mod args;
 
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::Once;
 use std::time::Duration;
 
 use super::commit_log::CommitLog;
@@ -21,7 +20,6 @@ use crate::commit_log::Topic;
 use async_stream::stream;
 use async_trait::async_trait;
 use log::{debug, trace};
-use metrics::describe_counter;
 use metrics::increment_counter;
 use reqwest::Certificate;
 use reqwest::{Client, Url};
@@ -29,8 +27,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use tokio::time;
 use tokio_stream::Stream;
-
-static INIT: Once = Once::new();
 
 /// A commit log holds topics and can be appended to and tailed.
 pub struct KafkaRestCommitLog {
@@ -56,35 +52,6 @@ type OffsetMap = HashMap<(Topic, u32), u64>;
 impl KafkaRestCommitLog {
     /// Establish a new commit log session.
     pub fn new(server: Url, server_cert: Option<Certificate>, tls_insecure: bool) -> Self {
-        INIT.call_once(|| {
-            describe_counter!(
-                "consumer_group_requests",
-                "number of consumer group requests"
-            );
-            describe_counter!(
-                "consumer_group_request_failures",
-                "number of consumer group request failures"
-            );
-            describe_counter!("offset_replies", "number of successful offset replies");
-            describe_counter!(
-                "offset_other_reply_failures",
-                "number of offset request failures"
-            );
-            describe_counter!(
-                "offset_unavailables",
-                "number of times the offsets is unavailable/offline"
-            );
-            describe_counter!("producer_replies", "number of successful producer replies");
-            describe_counter!(
-                "producer_other_reply_failures",
-                "number of producer request failures"
-            );
-            describe_counter!(
-                "producer_unavailables",
-                "number of times the producer is unavailable/offline"
-            );
-        });
-
         let client = Client::builder().danger_accept_invalid_certs(tls_insecure);
 
         let client = if let Some(cert) = server_cert {

@@ -1,3 +1,5 @@
+//! Helpers to serde base64 values
+
 use serde::{Deserialize, Serialize};
 use serde::{Deserializer, Serializer};
 

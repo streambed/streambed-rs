@@ -1,4 +1,4 @@
-// Utility for delaying with exponential backoff. Once retries have
+// Internal utility for delaying with exponential backoff. Once retries have
 // been attained then we start again. There are a hard set of values
 // here as it is private within Streambed.
 
