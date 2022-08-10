@@ -32,14 +32,17 @@ pub mod state_storage;
 
 mod delayer;
 
+use std::sync::Arc;
 use std::time::Duration;
 use std::{error::Error, path::Path};
 
-use log::{info, warn};
+use log::{debug, info, warn};
 use rand::RngCore;
 use reqwest::Certificate;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncBufReadExt;
+use tokio::sync::Notify;
+use tokio::task::JoinHandle;
 use tokio::time;
 use tokio::{
     fs,
@@ -73,6 +76,13 @@ pub async fn pem_from_file(path: &Path) -> Result<Certificate, Box<dyn Error>> {
     Certificate::from_pem(&buf).map_err(|e| e.into())
 }
 
+/// A handle to the task created by `authenticate_secret_store` that
+/// can be used to subsequently cancel it.
+pub struct AuthenticationTask {
+    join_handle: Option<JoinHandle<()>>,
+    termination: Arc<Notify>,
+}
+
 /// Performs an initial authentication with the secret store and also spawns a
 /// task to re-authenticate on token expiry. A timeout is provided to cause the
 /// re-authentication to sleep between non-successful authentication attempts.
@@ -81,12 +91,14 @@ pub async fn authenticate_secret_store(
     role_id: &str,
     secret_id: &str,
     unauthenticated_timeout: Duration,
-) {
+) -> AuthenticationTask {
     let mut approle_auth_reply = ss.approle_auth(role_id, secret_id).await;
     let auth_role_id = role_id.to_string();
     let auth_secret_id = secret_id.to_string();
     let auth_unauthenticated_timeout = unauthenticated_timeout;
-    tokio::spawn(async move {
+    let termination = Arc::new(Notify::new());
+    let task_termination = termination.clone();
+    let join_handle = tokio::spawn(async move {
         let mut never_reported_info = true;
         let mut never_reported_warn = true;
         loop {
@@ -96,8 +108,12 @@ pub async fn authenticate_secret_store(
                         info!("Initially authenticated with the secret store");
                         never_reported_info = false;
                     }
-                    time::sleep(Duration::from_secs(approle_auth.auth.lease_duration)).await;
-                    approle_auth_reply = ss.approle_auth(&auth_role_id, &auth_secret_id).await;
+                    tokio::select! {
+                        _ = task_termination.notified() => break,
+                        _ = time::sleep(Duration::from_secs(approle_auth.auth.lease_duration)) => {
+                            approle_auth_reply = ss.approle_auth(&auth_role_id, &auth_secret_id).await;
+                        }
+                    }
                 }
                 Err(e) => {
                     if never_reported_warn {
@@ -107,11 +123,31 @@ pub async fn authenticate_secret_store(
                         );
                         never_reported_warn = false;
                     }
-                    time::sleep(auth_unauthenticated_timeout).await
+                    tokio::select! {
+                        _ = task_termination.notified() => break,
+                        _ = time::sleep(auth_unauthenticated_timeout) => (),
+                    }
                 }
             }
         }
     });
+    AuthenticationTask {
+        join_handle: Some(join_handle),
+        termination,
+    }
+}
+
+impl AuthenticationTask {
+    /// Cancels a previous authentication task and waits for it to
+    /// finish. The method may be called multiple times, although
+    /// it is effective only on the first call.
+    pub async fn cancel(&mut self) {
+        if let Some(join_handle) = self.join_handle.take() {
+            debug!("Cancelling the original secret store authentication");
+            self.termination.notify_one();
+            let _ = join_handle.await;
+        }
+    }
 }
 
 /// Given a secret store, a path to a secret, get a secret.
