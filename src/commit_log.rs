@@ -1,5 +1,9 @@
-//! Commit log functionality that is modelled on Apache Kafka's
-//! API, but can be implemented with multiple types of backend
+//! [A commit log is an append-only data structure that can be used
+//! in a variety of use-cases, such as tracking sequences of events,
+//! transactions or replicated state machines](https://docs.rs/commitlog/latest/commitlog/).
+//!
+//! Commit log functionality that is modelled on [Apache Kafka's](https://kafka.apache.org/)
+//! API, and can be implemented with multiple types of backend
 //! e.g. one that uses the Kafka HTTP REST API.
 
 use std::{pin::Pin, time::Duration};
@@ -18,7 +22,7 @@ pub type Topic = String;
 
 /// A header provides a means of augmenting a record with
 /// meta-data.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Header {
     key: String,
     #[serde(with = "base64_serde")]
@@ -26,7 +30,7 @@ pub struct Header {
 }
 
 /// A declaration of an offset to be committed to a topic.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ConsumerOffset {
     pub topic: Topic,
     pub partition: u32,
@@ -34,7 +38,7 @@ pub struct ConsumerOffset {
 }
 
 /// A declaration of a topic to subscribe to
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Subscription {
     pub topic: Topic,
 }
@@ -46,14 +50,14 @@ pub struct Subscription {
 /// In the case where subscriptions are supplied, the consumer
 /// instance will subscribe and reply with a stream of records
 /// ending only when the connection to the topic is severed.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Consumer {
     pub offsets: Option<Vec<ConsumerOffset>>,
     pub subscriptions: Vec<Subscription>,
 }
 
 /// A declaration of a record produced by a subscription
-#[derive(Clone, Deserialize, Debug, PartialEq, Serialize)]
+#[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
 pub struct ConsumerRecord {
     pub topic: Topic,
     pub headers: Option<Vec<Header>>,
@@ -66,17 +70,17 @@ pub struct ConsumerRecord {
 }
 
 /// The reply to an offsets request
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PartitionOffsets {
     pub beginning_offset: u64,
     pub end_offset: u64,
 }
 
-/// A declaration of a record produced by a subscription
-#[derive(Clone, Deserialize, Debug, PartialEq, Serialize)]
+/// A declaration of a record to be produced to a topic
+#[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
 pub struct ProducerRecord {
     pub topic: Topic,
-    pub headers: Vec<Header>,
+    pub headers: Option<Vec<Header>>,
     pub timestamp: Option<DateTime<Utc>>,
     pub key: u64,
     #[serde(with = "base64_serde")]
@@ -85,13 +89,13 @@ pub struct ProducerRecord {
 }
 
 /// The reply to a publish request
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ProducedOffset {
     pub offset: u64,
 }
 
 /// There was a problem producing a record
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProducerError {
     /// The commit log received the request but was unable to process it.
     CannotProduce,
@@ -118,5 +122,5 @@ pub trait CommitLog {
         offsets: Option<Vec<ConsumerOffset>>,
         subscriptions: Vec<Subscription>,
         idle_timeout: Option<Duration>,
-    ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + 'a>>;
+    ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + Send + 'a>>;
 }

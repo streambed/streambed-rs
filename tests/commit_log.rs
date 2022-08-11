@@ -118,7 +118,7 @@ async fn kafka_rest_scoped_subscribe() {
     assert_eq!(events.next().await, None);
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 struct ProduceRequest {
     pub records: Vec<ProducerRecord>,
 }
@@ -139,7 +139,7 @@ async fn kafka_publish() {
             ProduceRequest {
                 records: vec![ProducerRecord {
                     topic: "default:end-device-events".to_string(),
-                    headers: vec![],
+                    headers: Some(vec![]),
                     timestamp: None,
                     key: 0,
                     value: b"hi there".to_vec(),
@@ -187,7 +187,7 @@ async fn kafka_publish() {
 
     let record = ProducerRecord {
         topic: "default:end-device-events".to_string(),
-        headers: vec![],
+        headers: Some(vec![]),
         timestamp: None,
         key: 0,
         value: b"hi there".to_vec(),

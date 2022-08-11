@@ -21,7 +21,7 @@ use crate::{
     secret_store::{AppRoleAuthReply, Error, GetSecretReply, SecretStore},
 };
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct AppRoleAuthRequest {
     pub role_id: String,
     pub secret_id: String,
