@@ -234,6 +234,14 @@ impl SecretStore for VaultSecretStore {
         }
     }
 
+    async fn create_secret(
+        &self,
+        _secret_path: &str,
+        _secret_data: crate::secret_store::SecretData,
+    ) -> Result<(), Error> {
+        todo!()
+    }
+
     /// Attempt to access a secret. An optional value of None in reply means that
     /// the client is unauthorized to obtain it - either due to authorization
     /// or it may just not exist.

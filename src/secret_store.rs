@@ -50,6 +50,9 @@ pub trait SecretStore {
     async fn approle_auth(&self, role_id: &str, secret_id: &str)
         -> Result<AppRoleAuthReply, Error>;
 
+    /// Attempt to create/update a secret.
+    async fn create_secret(&self, secret_path: &str, secret_data: SecretData) -> Result<(), Error>;
+
     /// Attempt to access a secret. An optional value of None in reply means that
     /// the client is unauthorized to obtain it - either due to authorization
     /// or it may just not exist.

@@ -47,6 +47,7 @@ use tokio::{
 
 pub mod base64_serde;
 pub mod commit_log;
+pub mod confidant;
 pub mod crypto;
 pub mod kafka;
 pub mod logged;
