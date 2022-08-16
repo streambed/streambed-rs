@@ -8,6 +8,7 @@ use cache_loader_async::{
     backing::{LruCacheBacking, TtlCacheBacking, TtlMeta},
     cache_api::{CacheEntry, LoadingCache, WithMeta},
 };
+use serde::{Deserialize, Serialize};
 use std::{
     io::ErrorKind,
     os::unix::prelude::{MetadataExt, PermissionsExt},
@@ -32,6 +33,12 @@ type TtlCache = LoadingCache<
         LruCacheBacking<String, (CacheEntry<Option<GetSecretReply>, Error>, Instant)>,
     >,
 >;
+
+#[derive(Deserialize, Serialize)]
+struct StorableSecretData {
+    version: u32,
+    secret_data: SecretData,
+}
 
 /// A secret store implementation that uses the file system as its
 /// backing store.
@@ -68,7 +75,9 @@ impl FileSecretStore {
                         Ok(mut file) => {
                             let mut buf = Vec::new();
                             if file.read_to_end(&mut buf).await.is_ok() {
-                                if let Ok(secret_data) = postcard::from_bytes::<SecretData>(&buf) {
+                                if let Ok(stored) = postcard::from_bytes::<StorableSecretData>(&buf)
+                                {
+                                    let secret_data = stored.secret_data;
                                     let mut lease_duration = None;
                                     if let Some(ttl_field) = task_ttl_field {
                                         if let Some(ttl) = secret_data.data.get(&ttl_field) {
@@ -137,7 +146,11 @@ impl SecretStore for FileSecretStore {
                     .open(self.root_path.join(secret_path))
                     .await
                 {
-                    if let Ok(buf) = postcard::to_stdvec(&secret_data) {
+                    let stored = StorableSecretData {
+                        version: 0,
+                        secret_data,
+                    };
+                    if let Ok(buf) = postcard::to_stdvec(&stored) {
                         if file.write_all(&buf).await.is_ok() {
                             result = Ok(());
                             let _ = self.cache.remove(secret_path.to_string()); // We should be able to read our writes
