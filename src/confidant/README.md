@@ -18,7 +18,12 @@ fs::set_permissions(&confidant_dir, PermissionsExt::from_mode(0o600))
     .await
     .unwrap();
 
-let ss = FileSecretStore::new(confidant_dir.clone());
+let ss = FileSecretStore::new(
+    confidant_dir.clone(),
+    Duration::from_secs(1), // Timeout for unauthorized secrets before we try again
+    10, // The number of secrets we cache
+    None, // A data field to be used to indicate a TTL - if any
+);
 
 let mut data = HashMap::new();
 data.insert("key".to_string(), "value".to_string());
@@ -61,9 +66,9 @@ Confidant is modelled with the same concepts as Hashicorp Vault.
 Services using confidant may therefore lend themselves to portability 
 toward Vault.
 
-## How is Vault implemented?
+## How is confidant implemented?
 
-Vault is implemented as a library avoiding the need for a server process.
+Confidant is implemented as a library avoiding the need for a server process.
 Please note that we had no requirements to serve Windows and wanted to leverage
 Unix file permissions explicitly. When a secret is written is to written with
 the same mode as the directory given to Confidant when instantiated. This then
@@ -76,6 +81,8 @@ permissions, including users, groups and ACLs, are leverage.
 operations permit other tasks to continue running. [Postcard](https://docs.rs/postcard/latest/postcard/)
 is used for serialization as it is able to conveniently represent in-memory structures
 and is optimized for resource-constrained targets.
+
+A TTL cache is maintained so that IO is minimized for those secrets that are often retrieved.
 
 ## When should you not use confidant
 

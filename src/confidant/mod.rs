@@ -4,6 +4,10 @@ use crate::secret_store::{
     AppRoleAuthReply, AuthToken, Error, GetSecretReply, SecretData, SecretStore,
 };
 use async_trait::async_trait;
+use cache_loader_async::{
+    backing::{LruCacheBacking, TtlCacheBacking, TtlMeta},
+    cache_api::{CacheEntry, LoadingCache, WithMeta},
+};
 use std::{
     io::ErrorKind,
     os::unix::prelude::{MetadataExt, PermissionsExt},
@@ -13,20 +17,93 @@ use std::{
 use tokio::{
     fs,
     io::{AsyncReadExt, AsyncWriteExt},
+    time::Instant,
 };
 
-const AUTHORIZED_SECRET_TTL: u64 = Duration::from_secs(60 * 5).as_secs();
+const AUTHORIZED_SECRET_TTL: Duration = Duration::from_secs(60 * 5);
+
+type TtlCache = LoadingCache<
+    String,
+    Option<GetSecretReply>,
+    Error,
+    TtlCacheBacking<
+        String,
+        CacheEntry<Option<GetSecretReply>, Error>,
+        LruCacheBacking<String, (CacheEntry<Option<GetSecretReply>, Error>, Instant)>,
+    >,
+>;
 
 /// A secret store implementation that uses the file system as its
 /// backing store.
+/// An unauthorized_timeout determines how long the server should wait before being
+/// requested again.
+/// A max_secrets_cached arg limits the number of secrets that can be held at any time.
 #[derive(Clone)]
 pub struct FileSecretStore {
+    cache: TtlCache,
     root_path: PathBuf,
 }
 
 impl FileSecretStore {
-    pub fn new(root_path: PathBuf) -> Self {
-        Self { root_path }
+    pub fn new(
+        root_path: PathBuf,
+        unauthorized_timeout: Duration,
+        max_secrets_cached: usize,
+        ttl_field: Option<&str>,
+    ) -> Self {
+        let retained_root_path = root_path.clone();
+        let ttl_field = ttl_field.map(|s| s.to_string());
+        let cache: TtlCache = LoadingCache::with_meta_loader(
+            TtlCacheBacking::with_backing(
+                unauthorized_timeout,
+                LruCacheBacking::new(max_secrets_cached),
+            ),
+            move |secret_path| {
+                let task_root_path = root_path.clone();
+                let task_ttl_field = ttl_field.clone();
+
+                async move {
+                    let mut result = Err(Error::Unauthorized);
+                    match fs::File::open(task_root_path.join(secret_path)).await {
+                        Ok(mut file) => {
+                            let mut buf = Vec::new();
+                            if file.read_to_end(&mut buf).await.is_ok() {
+                                if let Ok(secret_data) = postcard::from_bytes::<SecretData>(&buf) {
+                                    let mut lease_duration = None;
+                                    if let Some(ttl_field) = task_ttl_field {
+                                        if let Some(ttl) = secret_data.data.get(&ttl_field) {
+                                            if let Ok(ttl_duration) =
+                                                ttl.parse::<humantime::Duration>()
+                                            {
+                                                lease_duration = Some(ttl_duration.into());
+                                            }
+                                        }
+                                    }
+
+                                    result = Ok(Some(GetSecretReply {
+                                        lease_duration: lease_duration
+                                            .unwrap_or(AUTHORIZED_SECRET_TTL)
+                                            .as_secs(),
+                                        data: secret_data,
+                                    }))
+                                    .with_meta(lease_duration.map(TtlMeta::from))
+                                }
+                            }
+                        }
+                        Err(e) if e.kind() == ErrorKind::NotFound => {
+                            result = Ok(None).with_meta(None);
+                        }
+                        Err(_) => (),
+                    }
+                    result
+                }
+            },
+        );
+
+        Self {
+            cache,
+            root_path: retained_root_path,
+        }
     }
 }
 
@@ -63,6 +140,7 @@ impl SecretStore for FileSecretStore {
                     if let Ok(buf) = postcard::to_stdvec(&secret_data) {
                         if file.write_all(&buf).await.is_ok() {
                             result = Ok(());
+                            let _ = self.cache.remove(secret_path.to_string()); // We should be able to read our writes
                         }
                     }
                 }
@@ -75,27 +153,11 @@ impl SecretStore for FileSecretStore {
     async fn get_secret(&self, secret_path: &str) -> Result<Option<GetSecretReply>, Error> {
         match fs::metadata(&self.root_path).await {
             Ok(attrs) if attrs.permissions().mode() & 0o077 != 0 => Err(Error::Unauthorized),
-            Ok(_) => {
-                let mut result = Err(Error::Unauthorized);
-                match fs::File::open(self.root_path.join(secret_path)).await {
-                    Ok(mut file) => {
-                        let mut buf = Vec::new();
-                        if file.read_to_end(&mut buf).await.is_ok() {
-                            if let Ok(secret_data) = postcard::from_bytes::<SecretData>(&buf) {
-                                result = Ok(Some(GetSecretReply {
-                                    lease_duration: AUTHORIZED_SECRET_TTL,
-                                    data: secret_data,
-                                }))
-                            }
-                        }
-                    }
-                    Err(e) if e.kind() == ErrorKind::NotFound => {
-                        result = Ok(None);
-                    }
-                    Err(_) => (),
-                }
-                result
-            }
+            Ok(_) => self
+                .cache
+                .get(secret_path.to_string())
+                .await
+                .map_err(|e| e.as_loading_error().unwrap().clone()), // Unsure how we can deal with caching issues
             Err(_) => Err(Error::Unauthorized),
         }
     }
@@ -116,13 +178,19 @@ mod tests {
         let _ = fs::create_dir_all(&confidant_dir).await;
         println!("Writing to {}", confidant_dir.to_string_lossy());
 
-        let ss = FileSecretStore::new(confidant_dir.clone());
+        let ss = FileSecretStore::new(
+            confidant_dir.clone(),
+            Duration::from_secs(1),
+            1,
+            Some("ttl"),
+        );
 
         // We don't need to auth, but doing so is a noop.
         ss.approle_auth("role_id", "secret_id").await.unwrap();
 
         let mut data = HashMap::new();
         data.insert("key".to_string(), "value".to_string());
+        data.insert("ttl".to_string(), "60m".to_string());
         let data = SecretData { data };
 
         // This should fail as we don't have the correct file permissions.
@@ -145,7 +213,7 @@ mod tests {
         assert_eq!(
             ss.get_secret("some.secret").await,
             Ok(Some(GetSecretReply {
-                lease_duration: AUTHORIZED_SECRET_TTL,
+                lease_duration: 3600,
                 data
             }))
         );
