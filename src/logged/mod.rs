@@ -337,50 +337,56 @@ mod tests {
         println!("Writing to {}", logged_dir.to_string_lossy());
 
         let cl = FileLog::new(logged_dir);
+        let task_cl = cl.clone();
 
         let topic = "my-topic";
 
         assert!(cl.offsets(topic.to_string(), 0).await.is_none());
 
-        cl.produce(ProducerRecord {
-            topic: topic.to_string(),
-            headers: None,
-            timestamp: None,
-            key: 0,
-            value: b"some-value-0".to_vec(),
-            partition: 0,
-        })
-        .await
-        .unwrap();
-        cl.produce(ProducerRecord {
-            topic: topic.to_string(),
-            headers: None,
-            timestamp: None,
-            key: 0,
-            value: b"some-value-1".to_vec(),
-            partition: 0,
-        })
-        .await
-        .unwrap();
-        cl.produce(ProducerRecord {
-            topic: topic.to_string(),
-            headers: None,
-            timestamp: None,
-            key: 0,
-            value: b"some-value-2".to_vec(),
-            partition: 0,
-        })
-        .await
-        .unwrap();
+        tokio::spawn(async move {
+            task_cl
+                .produce(ProducerRecord {
+                    topic: topic.to_string(),
+                    headers: None,
+                    timestamp: None,
+                    key: 0,
+                    value: b"some-value-0".to_vec(),
+                    partition: 0,
+                })
+                .await
+                .unwrap();
+            task_cl
+                .produce(ProducerRecord {
+                    topic: topic.to_string(),
+                    headers: None,
+                    timestamp: None,
+                    key: 0,
+                    value: b"some-value-1".to_vec(),
+                    partition: 0,
+                })
+                .await
+                .unwrap();
+            task_cl
+                .produce(ProducerRecord {
+                    topic: topic.to_string(),
+                    headers: None,
+                    timestamp: None,
+                    key: 0,
+                    value: b"some-value-2".to_vec(),
+                    partition: 0,
+                })
+                .await
+                .unwrap();
 
-        let offsets = cl.offsets(topic.to_string(), 0).await.unwrap();
-        assert_eq!(
-            offsets,
-            PartitionOffsets {
-                beginning_offset: 0,
-                end_offset: 2
-            }
-        );
+            let offsets = task_cl.offsets(topic.to_string(), 0).await.unwrap();
+            assert_eq!(
+                offsets,
+                PartitionOffsets {
+                    beginning_offset: 0,
+                    end_offset: 2
+                }
+            );
+        });
 
         let offsets = Some(vec![ConsumerOffset {
             topic: topic.to_string(),
