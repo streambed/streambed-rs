@@ -28,10 +28,6 @@
 //!
 //! Streambed builds on Rust's traits of writing fast and efficient software correctly.
 
-pub mod state_storage;
-
-mod delayer;
-
 use std::sync::Arc;
 use std::time::Duration;
 use std::{error::Error, path::Path};
@@ -53,8 +49,12 @@ pub mod base64_serde;
 pub mod commit_log;
 pub mod crypto;
 pub mod kafka;
+pub mod logged;
 pub mod secret_store;
+pub mod state_storage;
 pub mod vault;
+
+mod delayer;
 
 /// Read the secret store's secret id associated with a service's role.
 /// We read the secret from stdin to avoid requiring secrets being

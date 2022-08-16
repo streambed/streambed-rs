@@ -37,12 +37,12 @@ pub struct KafkaRestCommitLog {
 const CONSUMER_GROUP_NAME_LABEL: &str = "consumer_group_name";
 const TOPIC_LABEL: &str = "topic";
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct ProduceRequest {
     pub records: Vec<ProducerRecord>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct ProduceReply {
     pub offsets: Vec<ProducedOffset>,
 }
@@ -175,7 +175,7 @@ impl CommitLog for KafkaRestCommitLog {
         offsets: Option<Vec<ConsumerOffset>>,
         subscriptions: Vec<Subscription>,
         idle_timeout: Option<Duration>,
-    ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + 'a>> {
+    ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + Send + 'a>> {
         let consumer_group_name = consumer_group_name.to_string();
         let mut offsets: OffsetMap = offsets
             .map(|e| {

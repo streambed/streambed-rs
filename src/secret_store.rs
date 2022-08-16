@@ -8,32 +8,32 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 /// The reply to a approle authentication
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct AppRoleAuthReply {
     pub auth: AuthToken,
 }
 
 /// An authentication token
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct AuthToken {
     pub client_token: String,
     pub lease_duration: u64,
 }
 
 /// The reply to a get secret request - includes the actual secret data.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct GetSecretReply {
     pub lease_duration: u64,
     pub data: SecretData,
 }
 
 /// Secrets and metadata
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SecretData {
     pub data: HashMap<String, String>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
     /// The secret store is not authenticated.
     Unauthorized,
