@@ -7,6 +7,7 @@ use support::*;
 
 use async_stream::stream;
 use reqwest::Url;
+use serde_json::json;
 use streambed::{commit_log::*, kafka::KafkaRestCommitLog};
 use tokio_stream::StreamExt;
 
@@ -15,12 +16,12 @@ async fn kafka_rest_scoped_subscribe() {
     let server = server::http(move |mut req| async move {
         assert_eq!(req.uri(), "/consumers/farmo-integrator");
 
-        let mut req_body: Vec<u8> = Vec::new();
+        let mut req_body = Vec::new();
         while let Some(item) = req.body_mut().next().await {
             req_body.extend(&*item.unwrap());
         }
 
-        let req_body: Consumer = serde_json::from_slice(&req_body).unwrap();
+        let req_body = serde_json::from_slice::<Consumer>(&req_body).unwrap();
         assert_eq!(
             req_body,
             Consumer {
@@ -128,12 +129,12 @@ async fn kafka_publish() {
     let server = server::http(move |mut req| async move {
         assert_eq!(req.uri(), "/topics/default:end-device-events");
 
-        let mut req_body: Vec<u8> = Vec::new();
+        let mut req_body = Vec::new();
         while let Some(item) = req.body_mut().next().await {
             req_body.extend(&*item.unwrap());
         }
 
-        let req_body: ProduceRequest = serde_json::from_slice(&req_body).unwrap();
+        let req_body = serde_json::from_slice::<ProduceRequest>(&req_body).unwrap();
         assert_eq!(
             req_body,
             ProduceRequest {
@@ -148,28 +149,28 @@ async fn kafka_publish() {
             }
         );
 
-        let body = r#"
-        {
-            "key_schema_id": null,
-            "value_schema_id": null,
-            "offsets": [
-              {
-                "partition": 2,
-                "offset": 100
-              },
-              {
-                "partition": 1,
-                "offset": 101
-              },
-              {
-                "partition": 2,
-                "offset": 102
-              }
-            ]
-        }          
-        "#;
+        let body = json!(
+            {
+                "key_schema_id": null,
+                "value_schema_id": null,
+                "offsets": [
+                {
+                    "partition": 2,
+                    "offset": 100
+                },
+                {
+                    "partition": 1,
+                    "offset": 101
+                },
+                {
+                    "partition": 2,
+                    "offset": 102
+                }
+                ]
+            }
+        );
 
-        http::Response::new(body.into())
+        http::Response::new(body.to_string().into())
     });
 
     let server_addr = server.addr();
@@ -205,14 +206,14 @@ async fn kafka_offsets() {
             "/topics/default:end-device-events/partitions/0/offsets"
         );
 
-        let body = r#"
-        {
-            "beginning_offset": 0,
-            "end_offset": 1
-        }          
-        "#;
+        let body = json!(
+            {
+                "beginning_offset": 0,
+                "end_offset": 1
+            }
+        );
 
-        http::Response::new(body.into())
+        http::Response::new(body.to_string().into())
     });
 
     let server_addr = server.addr();
