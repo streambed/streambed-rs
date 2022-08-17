@@ -7,7 +7,7 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 pub struct StateStorageArgs {
     /// A file system path to where state may be stored
-    #[clap(env, long, default_value = "/var/run/farmo-integrator")]
+    #[clap(env, long, default_value = "/var/run")]
     pub state_storage_path: PathBuf,
 
     /// The interval between connecting to the commit-log-server and storing our state.

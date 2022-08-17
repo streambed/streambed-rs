@@ -1,5 +1,7 @@
 #![doc = include_str!("README.md")]
 
+pub mod args;
+
 use crate::secret_store::{
     AppRoleAuthReply, AuthToken, Error, GetSecretReply, SecretData, SecretStore,
 };
@@ -139,11 +141,17 @@ impl SecretStore for FileSecretStore {
             Ok(attrs) if attrs.permissions().mode() & 0o077 != 0 => Err(Error::Unauthorized),
             Ok(attrs) => {
                 let mut result = Err(Error::Unauthorized);
+
+                let path = self.root_path.join(secret_path);
+                if let Some(parent) = path.parent() {
+                    let _ = fs::create_dir_all(parent).await;
+                }
+
                 if let Ok(mut file) = fs::OpenOptions::new()
                     .create(true)
                     .write(true)
                     .mode(attrs.mode())
-                    .open(self.root_path.join(secret_path))
+                    .open(path)
                     .await
                 {
                     let stored = StorableSecretData {
