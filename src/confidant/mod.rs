@@ -214,6 +214,11 @@ mod tests {
         data.insert("ttl".to_string(), "60m".to_string());
         let data = SecretData { data };
 
+        // Set up the permissions to cause secret creation failure
+        fs::set_permissions(&confidant_dir, PermissionsExt::from_mode(0o755))
+            .await
+            .unwrap();
+
         // This should fail as we don't have the correct file permissions.
         // We are looking for the confidant dir to have owner permissions
         // only + the ability for the owner to write.
