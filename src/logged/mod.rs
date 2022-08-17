@@ -1,5 +1,7 @@
 #![doc = include_str!("README.md")]
 
+pub mod args;
+
 use super::base64_serde;
 use crate::commit_log::{
     CommitLog, ConsumerOffset, ConsumerRecord, Header, PartitionOffsets, ProducedOffset,
@@ -220,7 +222,7 @@ impl CommitLog for FileLog {
         for s in subscriptions {
             let task_topic_file = self.root_path.join(&s.topic);
             let task_topic = s.topic.clone();
-            let task_offset = offsets.get(&s.topic).copied();
+            let mut task_offset = offsets.get(&s.topic).copied();
             let task_tx = tx.clone();
             tokio::spawn(async move {
                 let mut buf = bytes::BytesMut::new();
@@ -256,6 +258,8 @@ impl CommitLog for FileLog {
                                             if task_tx.send(consumer_record).await.is_err() {
                                                 break 'outer;
                                             }
+
+                                            task_offset = Some(record.offset)
                                         }
                                     }
                                     Ok(None) if len == 0 => {
@@ -443,7 +447,7 @@ mod tests {
         });
 
         subscribing.notified().await;
-        time::sleep(TOPIC_FILE_CONSUMER_POLL * 2).await;
+        time::sleep(TOPIC_FILE_CONSUMER_POLL + Duration::from_millis(500)).await;
 
         cl.produce(ProducerRecord {
             topic: topic.to_string(),
@@ -503,7 +507,7 @@ mod tests {
             "some-consumer",
             None,
             subscriptions,
-            Some(Duration::from_millis(100)),
+            Some(TOPIC_FILE_CONSUMER_POLL + Duration::from_millis(500)),
         );
         assert!(records.next().await.is_some());
         assert!(records.next().await.is_none());
