@@ -54,12 +54,13 @@ pub struct FileSecretStore {
 }
 
 impl FileSecretStore {
-    pub fn new(
-        root_path: PathBuf,
+    pub fn new<P: Into<PathBuf>>(
+        root_path: P,
         unauthorized_timeout: Duration,
         max_secrets_cached: usize,
         ttl_field: Option<&str>,
     ) -> Self {
+        let root_path = root_path.into();
         let retained_root_path = root_path.clone();
         let ttl_field = ttl_field.map(|s| s.to_string());
         let cache: TtlCache = LoadingCache::with_meta_loader(
