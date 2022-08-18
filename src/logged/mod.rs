@@ -63,7 +63,8 @@ struct StorableRecord {
 }
 
 impl FileLog {
-    pub fn new(root_path: PathBuf) -> Self {
+    pub fn new<P: Into<PathBuf>>(root_path: P) -> Self {
+        let root_path = root_path.into();
         let retained_root_path = root_path.clone();
 
         let (producer_tx, mut producer_rx) = mpsc::channel::<(
@@ -336,9 +337,11 @@ mod tests {
     #[test(tokio::test)]
     async fn test_produce_consume() {
         let logged_dir = env::temp_dir().join("test_produce_consume");
+        // Deliberately converting to a String to test Into<PathBuf>
+        let logged_dir = logged_dir.to_string_lossy().to_string();
         let _ = fs::remove_dir_all(&logged_dir).await;
         let _ = fs::create_dir_all(&logged_dir).await;
-        println!("Writing to {}", logged_dir.to_string_lossy());
+        println!("Writing to {}", logged_dir);
 
         let cl = FileLog::new(logged_dir);
         let task_cl = cl.clone();
