@@ -142,10 +142,10 @@ async fn find_offset(
     root_path: &Path,
     topic: &str,
 ) -> Result<Option<PartitionOffsets>, std::io::Error> {
-    let topic_file = fs::File::open(root_path.join(topic)).await;
+    let topic_file = File::open(root_path.join(topic)).await;
     match topic_file {
         Ok(mut topic_file) => {
-            let mut buf = bytes::BytesMut::new();
+            let mut buf = BytesMut::new();
             let mut decoder = StorableRecordDecoder;
             let mut beginning_offset = None;
             let mut end_offset = None;
@@ -155,17 +155,16 @@ async fn find_offset(
                 } else {
                     StorableRecordDecoder::decode
                 };
-                match decode_fn(&mut decoder, &mut buf) {
-                    Ok(Some(record)) if beginning_offset.is_none() => {
+                match decode_fn(&mut decoder, &mut buf)? {
+                    Some(record) if beginning_offset.is_none() => {
                         beginning_offset = Some(record.offset);
                         end_offset = Some(record.offset);
                     }
-                    Ok(Some(record)) => {
+                    Some(record) => {
                         end_offset = Some(record.offset);
                     }
-                    Ok(None) if len == 0 => break,
-                    Ok(None) => (),
-                    Err(e) => return Err(e),
+                    None if len == 0 => break,
+                    None => (),
                 }
             }
             Ok(Some(PartitionOffsets {
@@ -211,7 +210,7 @@ impl CommitLog for FileLog {
             .map(|e| {
                 e.iter()
                     .map(|e| {
-                        assert!(e.partition == 0);
+                        assert_eq!(e.partition, 0);
                         (e.topic.to_owned(), e.offset)
                     })
                     .collect::<HashMap<Topic, u64>>()
@@ -226,11 +225,11 @@ impl CommitLog for FileLog {
             let mut task_offset = offsets.get(&s.topic).copied();
             let task_tx = tx.clone();
             tokio::spawn(async move {
-                let mut buf = bytes::BytesMut::new();
+                let mut buf = BytesMut::new();
                 let mut decoder = StorableRecordDecoder;
                 'outer: loop {
                     buf.clear();
-                    match fs::File::open(&task_topic_file).await {
+                    match File::open(&task_topic_file).await {
                         Ok(mut topic_file) => {
                             while let Ok(len) = topic_file.read_buf(&mut buf).await {
                                 let decode_fn = if len == 0 {
