@@ -92,6 +92,7 @@ pub async fn authenticate_secret_store(
     role_id: &str,
     secret_id: &str,
     unauthenticated_timeout: Duration,
+    max_lease_duration: Duration,
 ) -> AuthenticationTask {
     let mut approle_auth_reply = ss.approle_auth(role_id, secret_id).await;
     let auth_role_id = role_id.to_string();
@@ -111,7 +112,7 @@ pub async fn authenticate_secret_store(
                     }
                     tokio::select! {
                         _ = task_termination.notified() => break,
-                        _ = time::sleep(Duration::from_secs(approle_auth.auth.lease_duration)) => {
+                        _ = time::sleep(Duration::from_secs(approle_auth.auth.lease_duration).min(max_lease_duration)) => {
                             approle_auth_reply = ss.approle_auth(&auth_role_id, &auth_secret_id).await;
                         }
                     }
