@@ -7,6 +7,14 @@ use reqwest::Url;
 
 #[derive(Parser, Debug)]
 pub struct SsArgs {
+    /// The maximum time we allow for a lease to expire. This is important to curb
+    /// situations where the secret store is not honoring a previously advised
+    /// lease duration for some reason. While this should never happen, given the
+    /// nature of the secret store being in a separate process, it technically
+    /// can happen (and has!).
+    #[clap(env, long, default_value = "30m")]
+    pub ss_max_lease_duration: humantime::Duration,
+
     /// The max number of Vault Secret Store secrets to retain by our cache at any time.
     /// Least Recently Used (LRU) secrets will be evicted from our cache once this value
     /// is exceeded.
