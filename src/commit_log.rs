@@ -11,7 +11,7 @@ use std::{pin::Pin, time::Duration};
 use super::base64_serde;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use tokio_stream::Stream;
 
 /// A topic to subscribe to or has been subscribed to. Topics
@@ -52,7 +52,8 @@ pub struct Subscription {
 /// ending only when the connection to the topic is severed.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Consumer {
-    pub offsets: Option<Vec<ConsumerOffset>>,
+    #[serde(deserialize_with = "nullable_vec")]
+    pub offsets: Vec<ConsumerOffset>,
     pub subscriptions: Vec<Subscription>,
 }
 
@@ -60,7 +61,8 @@ pub struct Consumer {
 #[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
 pub struct ConsumerRecord {
     pub topic: Topic,
-    pub headers: Option<Vec<Header>>,
+    #[serde(deserialize_with = "nullable_vec")]
+    pub headers: Vec<Header>,
     pub timestamp: Option<DateTime<Utc>>,
     pub key: u64,
     #[serde(with = "base64_serde")]
@@ -80,7 +82,8 @@ pub struct PartitionOffsets {
 #[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
 pub struct ProducerRecord {
     pub topic: Topic,
-    pub headers: Option<Vec<Header>>,
+    #[serde(deserialize_with = "nullable_vec")]
+    pub headers: Vec<Header>,
     pub timestamp: Option<DateTime<Utc>>,
     pub key: u64,
     #[serde(with = "base64_serde")]
@@ -119,8 +122,76 @@ pub trait CommitLog {
     fn scoped_subscribe<'a>(
         &'a self,
         consumer_group_name: &str,
-        offsets: Option<Vec<ConsumerOffset>>,
+        offsets: Vec<ConsumerOffset>,
         subscriptions: Vec<Subscription>,
         idle_timeout: Option<Duration>,
     ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + Send + 'a>>;
+}
+
+fn nullable_vec<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Deserialize::deserialize(d).map(|x: Option<_>| x.unwrap_or_default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nullable_vec_handles_null() {
+        let json = r#"
+        {
+            "offsets": null,
+            "subscriptions": []
+        }
+        "#;
+        assert_eq!(
+            serde_json::from_str::<Consumer>(&json).unwrap(),
+            Consumer {
+                offsets: vec![],
+                subscriptions: vec![]
+            }
+        );
+    }
+
+    #[test]
+    fn test_nullable_vec_handles_empty_vec() {
+        let json = r#"
+        {
+            "offsets": [],
+            "subscriptions": []
+        }
+        "#;
+        assert_eq!(
+            serde_json::from_str::<Consumer>(&json).unwrap(),
+            Consumer {
+                offsets: vec![],
+                subscriptions: vec![]
+            }
+        );
+    }
+
+    #[test]
+    fn test_nullable_vec_handles_vec() {
+        let json = r#"
+        {
+            "offsets": [{"topic": "topic", "partition": 0, "offset": 0}],
+            "subscriptions": []
+        }
+        "#;
+        assert_eq!(
+            serde_json::from_str::<Consumer>(&json).unwrap(),
+            Consumer {
+                offsets: vec![ConsumerOffset {
+                    topic: "topic".to_string(),
+                    partition: 0,
+                    offset: 0
+                }],
+                subscriptions: vec![]
+            }
+        );
+    }
 }

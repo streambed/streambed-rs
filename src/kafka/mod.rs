@@ -172,33 +172,30 @@ impl CommitLog for KafkaRestCommitLog {
     fn scoped_subscribe<'a>(
         &'a self,
         consumer_group_name: &str,
-        offsets: Option<Vec<ConsumerOffset>>,
+        offsets: Vec<ConsumerOffset>,
         subscriptions: Vec<Subscription>,
         idle_timeout: Option<Duration>,
     ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + Send + 'a>> {
         let consumer_group_name = consumer_group_name.to_string();
         let mut offsets: OffsetMap = offsets
-            .map(|e| {
-                e.iter()
-                    .map(|e| ((e.topic.to_owned(), e.partition), e.offset))
-                    .collect::<OffsetMap>()
-            })
-            .unwrap_or_default();
+            .iter()
+            .map(|e| ((e.topic.to_owned(), e.partition), e.offset))
+            .collect::<OffsetMap>();
         let subscriptions: Vec<Subscription> = subscriptions.iter().map(|e| e.to_owned()).collect();
         Box::pin(stream!({
             let mut delayer = Delayer::new();
             'stream_loop: loop {
                 increment_counter!("consumer_group_requests", CONSUMER_GROUP_NAME_LABEL => consumer_group_name.to_string());
                 let consumer = Consumer {
-                    offsets: Some(offsets.clone()).map(|e| {
-                        e.iter()
-                            .map(|((topic, partition), offset)| ConsumerOffset {
-                                offset: *offset,
-                                partition: *partition,
-                                topic: topic.to_string(),
-                            })
-                            .collect()
-                    }),
+                    offsets: offsets
+                        .clone()
+                        .iter()
+                        .map(|((topic, partition), offset)| ConsumerOffset {
+                            offset: *offset,
+                            partition: *partition,
+                            topic: topic.to_string(),
+                        })
+                        .collect(),
                     subscriptions: subscriptions.clone(),
                 };
                 let response = self
