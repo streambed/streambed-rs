@@ -54,7 +54,7 @@ pub struct FileLog {
 #[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
 struct StorableRecord {
     version: u32,
-    headers: Option<Vec<Header>>,
+    headers: Vec<Header>,
     timestamp: Option<DateTime<Utc>>,
     key: u64,
     #[serde(with = "base64_serde")]
@@ -202,20 +202,17 @@ impl CommitLog for FileLog {
     fn scoped_subscribe<'a>(
         &'a self,
         _consumer_group_name: &str,
-        offsets: Option<Vec<ConsumerOffset>>,
+        offsets: Vec<ConsumerOffset>,
         subscriptions: Vec<Subscription>,
         idle_timeout: Option<Duration>,
     ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + Send + 'a>> {
         let offsets = offsets
+            .iter()
             .map(|e| {
-                e.iter()
-                    .map(|e| {
-                        assert_eq!(e.partition, 0);
-                        (e.topic.to_owned(), e.offset)
-                    })
-                    .collect::<HashMap<Topic, u64>>()
+                assert_eq!(e.partition, 0);
+                (e.topic.to_owned(), e.offset)
             })
-            .unwrap_or_default();
+            .collect::<HashMap<Topic, u64>>();
 
         let (tx, mut rx) = mpsc::channel(CONSUMER_QUEUE_SIZE);
 
@@ -353,7 +350,7 @@ mod tests {
             task_cl
                 .produce(ProducerRecord {
                     topic: topic.to_string(),
-                    headers: None,
+                    headers: vec![],
                     timestamp: None,
                     key: 0,
                     value: b"some-value-0".to_vec(),
@@ -364,7 +361,7 @@ mod tests {
             task_cl
                 .produce(ProducerRecord {
                     topic: topic.to_string(),
-                    headers: None,
+                    headers: vec![],
                     timestamp: None,
                     key: 0,
                     value: b"some-value-1".to_vec(),
@@ -375,7 +372,7 @@ mod tests {
             task_cl
                 .produce(ProducerRecord {
                     topic: topic.to_string(),
-                    headers: None,
+                    headers: vec![],
                     timestamp: None,
                     key: 0,
                     value: b"some-value-2".to_vec(),
@@ -394,11 +391,11 @@ mod tests {
             );
         });
 
-        let offsets = Some(vec![ConsumerOffset {
+        let offsets = vec![ConsumerOffset {
             topic: topic.to_string(),
             partition: 0,
             offset: 1,
-        }]);
+        }];
         let subscriptions = vec![Subscription {
             topic: topic.to_string(),
         }];
@@ -408,7 +405,7 @@ mod tests {
             records.next().await,
             Some(ConsumerRecord {
                 topic: topic.to_string(),
-                headers: None,
+                headers: vec![],
                 timestamp: None,
                 key: 0,
                 value: b"some-value-2".to_vec(),
@@ -440,7 +437,8 @@ mod tests {
             let subscriptions = vec![Subscription {
                 topic: topic.to_string(),
             }];
-            let mut records = task_cl.scoped_subscribe("some-consumer", None, subscriptions, None);
+            let mut records =
+                task_cl.scoped_subscribe("some-consumer", vec![], subscriptions, None);
             task_subscribing.notify_one();
 
             while records.next().await.is_some() {
@@ -453,7 +451,7 @@ mod tests {
 
         cl.produce(ProducerRecord {
             topic: topic.to_string(),
-            headers: None,
+            headers: vec![],
             timestamp: None,
             key: 0,
             value: b"some-value-0".to_vec(),
@@ -475,11 +473,11 @@ mod tests {
 
         let topic = "my-topic";
 
-        let offsets = Some(vec![ConsumerOffset {
+        let offsets = vec![ConsumerOffset {
             topic: topic.to_string(),
             partition: 0,
             offset: 1,
-        }]);
+        }];
         let subscriptions = vec![Subscription {
             topic: topic.to_string(),
         }];
@@ -493,7 +491,7 @@ mod tests {
 
         cl.produce(ProducerRecord {
             topic: topic.to_string(),
-            headers: None,
+            headers: vec![],
             timestamp: None,
             key: 0,
             value: b"some-value-0".to_vec(),
@@ -507,7 +505,7 @@ mod tests {
         }];
         let mut records = cl.scoped_subscribe(
             "some-consumer",
-            None,
+            vec![],
             subscriptions,
             Some(TOPIC_FILE_CONSUMER_POLL + Duration::from_millis(500)),
         );
