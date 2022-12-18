@@ -4,7 +4,8 @@ Logged is a small library that implements a file-system-based
 commit log function for autonomous systems that often live
 at the edge of a wider network.
 
-Logged implements the Streambed commit log API.
+Logged implements the Streambed commit log API which, in turn, models
+itself on the Kafka API.
 
 ## An quick introduction
 

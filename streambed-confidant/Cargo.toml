@@ -1,0 +1,19 @@
+[package]
+name = "streambed-confidant"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = { workspace = true }
+cache_loader_async = { workspace = true, features = ["lru-cache", "ttl-cache"] }
+clap = { workspace = true, features = ["derive", "env"] }
+humantime = { workspace = true }
+postcard = { workspace = true, default-features = false, features = ["use-std"] }
+serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["full"] }
+
+streambed = { path = "../streambed" }
+
+[dev-dependencies]
+env_logger = { workspace = true }
+test-log = { workspace = true }

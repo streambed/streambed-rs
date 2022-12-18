@@ -1,5 +1,3 @@
-#[path = "support/mod.rs"]
-mod support;
 use std::{
     collections::HashMap,
     sync::atomic::{AtomicUsize, Ordering},
@@ -7,11 +5,12 @@ use std::{
 };
 
 use http::Method;
-use support::*;
+use streambed_test::server;
+use streambed_vault::VaultSecretStore;
 
 use reqwest::Url;
 use std::str;
-use streambed::{secret_store::*, vault::VaultSecretStore};
+use streambed::secret_store::*;
 use tokio_stream::StreamExt;
 
 #[tokio::test]

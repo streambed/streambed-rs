@@ -1,4 +1,4 @@
-//! Provides commit log functionality to connect with the Kafka HTTP API
+#![doc = include_str!("../README.md")]
 
 pub mod args;
 
@@ -6,17 +6,6 @@ use std::collections::HashMap;
 use std::pin::Pin;
 use std::time::Duration;
 
-use super::commit_log::CommitLog;
-use super::commit_log::Consumer;
-use super::commit_log::ConsumerRecord;
-use super::commit_log::Subscription;
-use super::delayer::Delayer;
-use crate::commit_log::ConsumerOffset;
-use crate::commit_log::PartitionOffsets;
-use crate::commit_log::ProducedOffset;
-use crate::commit_log::ProducerError;
-use crate::commit_log::ProducerRecord;
-use crate::commit_log::Topic;
 use async_stream::stream;
 use async_trait::async_trait;
 use log::{debug, trace};
@@ -25,6 +14,17 @@ use reqwest::Certificate;
 use reqwest::{Client, Url};
 use serde::Deserialize;
 use serde::Serialize;
+use streambed::commit_log::CommitLog;
+use streambed::commit_log::Consumer;
+use streambed::commit_log::ConsumerOffset;
+use streambed::commit_log::ConsumerRecord;
+use streambed::commit_log::PartitionOffsets;
+use streambed::commit_log::ProducedOffset;
+use streambed::commit_log::ProducerError;
+use streambed::commit_log::ProducerRecord;
+use streambed::commit_log::Subscription;
+use streambed::commit_log::Topic;
+use streambed::delayer::Delayer;
 use tokio::time;
 use tokio_stream::Stream;
 
@@ -70,7 +70,7 @@ impl KafkaRestCommitLog {
 #[async_trait]
 impl CommitLog for KafkaRestCommitLog {
     async fn offsets(&self, topic: Topic, partition: u32) -> Option<PartitionOffsets> {
-        let mut delayer = Delayer::new();
+        let mut delayer = Delayer::default();
         loop {
             match self
                 .client
@@ -112,7 +112,7 @@ impl CommitLog for KafkaRestCommitLog {
     }
 
     async fn produce(&self, record: ProducerRecord) -> Result<ProducedOffset, ProducerError> {
-        let mut delayer = Delayer::new();
+        let mut delayer = Delayer::default();
         loop {
             match self
                 .client
@@ -183,7 +183,7 @@ impl CommitLog for KafkaRestCommitLog {
             .collect::<OffsetMap>();
         let subscriptions: Vec<Subscription> = subscriptions.iter().map(|e| e.to_owned()).collect();
         Box::pin(stream!({
-            let mut delayer = Delayer::new();
+            let mut delayer = Delayer::default();
             'stream_loop: loop {
                 increment_counter!("consumer_group_requests", CONSUMER_GROUP_NAME_LABEL => consumer_group_name.to_string());
                 let consumer = Consumer {
@@ -235,7 +235,7 @@ impl CommitLog for KafkaRestCommitLog {
                             }
                             Ok(None) => {
                                 debug!("Unable to receive chunk");
-                                delayer = Delayer::new();
+                                delayer = Delayer::default();
                                 continue 'stream_loop;
                             }
                             Err(e) => debug!("Error receiving chunk {:?}", e),

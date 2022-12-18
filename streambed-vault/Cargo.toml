@@ -1,0 +1,26 @@
+[package]
+name = "streambed-vault"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = { workspace = true }
+cache_loader_async = { workspace = true, features = ["lru-cache", "ttl-cache"] }
+clap = { workspace = true, features = ["derive", "env"] }
+humantime = { workspace = true }
+log = { workspace = true }
+metrics = { workspace = true, default-features = false }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["full"] }
+
+streambed = { path = "../streambed" }
+
+[dev-dependencies]
+env_logger = { workspace = true }
+http = { workspace = true }
+hyper = { workspace = true, default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server", "runtime"] }
+test-log = { workspace = true }
+tokio-stream = { workspace = true }
+
+streambed-test = { path = "../streambed-test" }

@@ -1,0 +1,27 @@
+[package]
+name = "streambed-kafka"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-stream = { workspace = true }
+async-trait = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+humantime = { workspace = true }
+log = { workspace = true }
+metrics = { workspace = true, default-features = false }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tokio-stream = { workspace = true }
+
+streambed = { path = "../streambed" }
+
+[dev-dependencies]
+env_logger ={ workspace = true }
+http = { workspace = true }
+hyper = { workspace = true, default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server", "runtime"] }
+test-log = { workspace = true }
+
+streambed-test = { path = "../streambed-test" }
