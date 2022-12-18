@@ -17,13 +17,26 @@ use tokio::{sync::Mutex, time::Instant};
 
 use streambed::{
     delayer::Delayer,
-    secret_store::{AppRoleAuthReply, Error, GetSecretReply, SecretData, SecretStore},
+    secret_store::{
+        AppRoleAuthReply, Error, GetSecretReply, SecretData, SecretStore, UserPassAuthReply,
+    },
 };
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct AppRoleAuthRequest {
     pub role_id: String,
     pub secret_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct UserPassAuthRequest {
+    pub password: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct UserPassCreateUpdateRequest {
+    pub username: String,
+    pub password: String,
 }
 
 type TtlCache = LoadingCache<
@@ -43,11 +56,16 @@ pub struct VaultSecretStore {
     cache: TtlCache,
     client: Client,
     client_token: Arc<Mutex<Option<String>>>,
+    max_secrets_cached: usize,
     server: Url,
+    ttl_field: Option<String>,
+    unauthorized_timeout: Duration,
 }
 
 const APPROLE_AUTH_LABEL: &str = "approle_auth";
 const SECRET_PATH_LABEL: &str = "secret_path";
+const USERPASS_AUTH_LABEL: &str = "userpass_auth";
+const USERPASS_CREATE_UPDATE_LABEL: &str = "userpass_create_update";
 
 impl VaultSecretStore {
     /// Establish a new client to Hashicorp Vault. In the case where TLS is required,
@@ -56,6 +74,9 @@ impl VaultSecretStore {
     /// An unauthorized_timeout determines how long the server should wait before being
     /// requested again.
     /// A max_secrets_cached arg limits the number of secrets that can be held at any time.
+    ///
+    /// Avoid creating many new Vault secret stores and clone them instead so that HTTP
+    /// connection pools can be shared.
     pub fn new(
         server: Url,
         server_cert: Option<Certificate>,
@@ -65,21 +86,35 @@ impl VaultSecretStore {
         ttl_field: Option<&str>,
     ) -> Self {
         let client = Client::builder().danger_accept_invalid_certs(tls_insecure);
-
         let client = if let Some(cert) = server_cert {
             client.add_root_certificate(cert)
         } else {
             client
         };
 
+        Self::with_new_cache(
+            client.build().unwrap(),
+            server,
+            unauthorized_timeout,
+            max_secrets_cached,
+            ttl_field.map(|s| s.to_string()),
+        )
+    }
+
+    fn with_new_cache(
+        client: Client,
+        server: Url,
+        unauthorized_timeout: Duration,
+        max_secrets_cached: usize,
+        ttl_field: Option<String>,
+    ) -> Self {
         let client_token: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         let retained_client_token = Arc::clone(&client_token);
 
-        let client = client.build().unwrap();
-        let ttl_field = ttl_field.map(|s| s.to_string());
-
         let retained_client = client.clone();
         let retained_server = server.clone();
+        let retained_ttl_field = ttl_field.clone();
+        let retained_unauthorized_timeout = unauthorized_timeout;
 
         let cache: TtlCache = LoadingCache::with_meta_loader(
             TtlCacheBacking::with_backing(
@@ -161,16 +196,26 @@ impl VaultSecretStore {
             cache,
             client: retained_client,
             client_token: retained_client_token,
+            max_secrets_cached,
+            ttl_field: retained_ttl_field,
             server: retained_server,
+            unauthorized_timeout: retained_unauthorized_timeout,
         }
+    }
+
+    pub fn with_new_auth_prepared(ss: &Self) -> Self {
+        Self::with_new_cache(
+            ss.client.clone(),
+            ss.server.clone(),
+            ss.unauthorized_timeout,
+            ss.max_secrets_cached,
+            ss.ttl_field.clone(),
+        )
     }
 }
 
 #[async_trait]
 impl SecretStore for VaultSecretStore {
-    /// Perform an app authentication given a role and secret. If successful, then the
-    /// secret store will be updated with a client token thereby permitting subsequent
-    /// operations including getting secrets.
     async fn approle_auth(
         &self,
         role_id: &str,
@@ -184,7 +229,7 @@ impl SecretStore for VaultSecretStore {
             let task_client_token = Arc::clone(&self.client_token);
             let result = self
                 .client
-                .put(
+                .post(
                     self.server
                         .join(&format!("{}v1/auth/approle/login", self.server))
                         .unwrap(),
@@ -241,13 +286,134 @@ impl SecretStore for VaultSecretStore {
         todo!()
     }
 
-    /// Attempt to access a secret. An optional value of None in reply means that
-    /// the client is unauthorized to obtain it - either due to authorization
-    /// or it may just not exist.
     async fn get_secret(&self, secret_path: &str) -> Result<Option<GetSecretReply>, Error> {
         self.cache
             .get(secret_path.to_owned())
             .await
             .map_err(|e| e.as_loading_error().unwrap().clone()) // Unsure how we can deal with caching issues
+    }
+
+    async fn userpass_auth(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<UserPassAuthReply, Error> {
+        let username = username.to_string();
+
+        increment_counter!("ss_userpass_auth_requests", USERPASS_AUTH_LABEL => username.clone());
+
+        let task_client_token = Arc::clone(&self.client_token);
+        let result = self
+            .client
+            .post(
+                self.server
+                    .join(&format!(
+                        "{}v1/auth/userpass/login/{}",
+                        self.server, username
+                    ))
+                    .unwrap(),
+            )
+            .json(&UserPassAuthRequest {
+                password: password.to_string(),
+            })
+            .send()
+            .await;
+        match result {
+            Ok(response) => {
+                if response.status() == StatusCode::FORBIDDEN {
+                    increment_counter!("ss_unauthorized", USERPASS_AUTH_LABEL => username.clone());
+                    Err(Error::Unauthorized)
+                } else {
+                    let secret_reply = if response.status().is_success() {
+                        let userpass_auth_reply = response
+                            .json::<UserPassAuthReply>()
+                            .await
+                            .map_err(|_| Error::Unauthorized);
+                        if let Ok(r) = &userpass_auth_reply {
+                            let mut client_token = task_client_token.lock().await;
+                            *client_token = Some(r.auth.client_token.clone());
+                        }
+                        userpass_auth_reply
+                    } else {
+                        debug!(
+                            "Secret store failure status while authenticating: {:?}",
+                            response.status()
+                        );
+                        increment_counter!("ss_other_reply_failures", USERPASS_AUTH_LABEL => username.clone());
+                        Err(Error::Unauthorized)
+                    };
+                    secret_reply
+                }
+            }
+            Err(e) => {
+                debug!(
+                    "Secret store is unavailable while authenticating. Error: {:?}",
+                    e
+                );
+                increment_counter!("ss_unavailables");
+                Err(Error::Unauthorized)
+            }
+        }
+    }
+
+    async fn token_auth(&self, _token: &str) -> Result<(), Error> {
+        todo!()
+    }
+
+    async fn userpass_create_update_user(
+        &self,
+        current_username: &str,
+        username: &str,
+        password: &str,
+    ) -> Result<(), Error> {
+        let username = username.to_string();
+
+        increment_counter!("ss_userpass_create_updates", USERPASS_CREATE_UPDATE_LABEL => username.clone());
+
+        let mut builder = self
+            .client
+            .post(
+                self.server
+                    .join(&format!(
+                        "{}v1/auth/userpass/users/{}",
+                        self.server, current_username
+                    ))
+                    .unwrap(),
+            )
+            .json(&UserPassCreateUpdateRequest {
+                username: username.to_string(),
+                password: password.to_string(),
+            });
+        if let Some(client_token) = self.client_token.lock().await.as_deref() {
+            builder = builder.header("X-Vault-Token", client_token)
+        }
+
+        let result = builder.send().await;
+        match result {
+            Ok(response) => {
+                if response.status() == StatusCode::FORBIDDEN {
+                    increment_counter!("ss_unauthorized", USERPASS_CREATE_UPDATE_LABEL => username.clone());
+                    Err(Error::Unauthorized)
+                } else if response.status().is_success() {
+                    let _ = response.json::<()>().await.map_err(|_| Error::Unauthorized);
+                    Ok(())
+                } else {
+                    debug!(
+                        "Secret store failure status while creating/updating userpass: {:?}",
+                        response.status()
+                    );
+                    increment_counter!("ss_other_reply_failures", USERPASS_CREATE_UPDATE_LABEL => username.clone());
+                    Err(Error::Unauthorized)
+                }
+            }
+            Err(e) => {
+                debug!(
+                    "Secret store is unavailable while creating/updating userpass. Error: {:?}",
+                    e
+                );
+                increment_counter!("ss_unavailables");
+                Err(Error::Unauthorized)
+            }
+        }
     }
 }

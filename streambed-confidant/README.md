@@ -4,7 +4,8 @@ Confidant is a small library that implements a file-system-based
 secret store function for autonomous systems that often live
 at the edge of a wider network.
 
-Confidant implements the Streambed secret store API.
+Confidant implements the Streambed secret store API and stored
+secrets are encrypted.
 
 ## An quick introduction
 
@@ -14,12 +15,13 @@ for more complete examples.
 
 ```rs
 // Let's set up the correct permissions for where all secrets will live
-fs::set_permissions(&confidant_dir, PermissionsExt::from_mode(0o600))
+fs::set_permissions(&confidant_dir, PermissionsExt::from_mode(0o700))
     .await
     .unwrap();
 
 let ss = FileSecretStore::new(
     confidant_dir.clone(),
+    &[0; crypto::KEY_SIZE], // A key to encrypt the stored secrets with
     Duration::from_secs(1), // Timeout for unauthorized secrets before we try again
     10, // The number of secrets we cache
     None, // A data field to be used to indicate a TTL - if any

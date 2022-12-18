@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{error::Error, path::Path};
 
+use crypto::SALT_SIZE;
 use log::{debug, info, warn};
 use rand::RngCore;
 use reqwest::Certificate;
@@ -23,16 +24,14 @@ pub mod crypto;
 pub mod delayer;
 pub mod secret_store;
 
-/// Read the secret store's secret id associated with a service's role.
-/// We read the secret from stdin to avoid requiring secrets being
-/// persisted elsewhere.
-pub async fn secret_id_from_stdin() -> Result<String, io::Error> {
-    let mut ss_secret_id = String::new();
+/// Read a line from stdin.
+pub async fn read_line_from_stdin() -> Result<String, io::Error> {
+    let mut line = String::new();
     let mut reader = BufReader::new(io::stdin());
-    reader.read_line(&mut ss_secret_id).await?;
-    let len = ss_secret_id.trim_end_matches(&['\r', '\n'][..]).len();
-    ss_secret_id.truncate(len);
-    Ok(ss_secret_id)
+    reader.read_line(&mut line).await?;
+    let len = line.trim_end_matches(&['\r', '\n'][..]).len();
+    line.truncate(len);
+    Ok(line)
 }
 
 /// Read a file as a pem file and return its corresponding Reqwest certificate.
@@ -53,7 +52,7 @@ pub struct AuthenticationTask {
 /// Performs an initial authentication with the secret store and also spawns a
 /// task to re-authenticate on token expiry. A timeout is provided to cause the
 /// re-authentication to sleep between non-successful authentication attempts.
-pub async fn authenticate_secret_store(
+pub async fn reauthenticate_secret_store(
     ss: impl secret_store::SecretStore + Sync + Send + Clone + 'static,
     role_id: &str,
     secret_id: &str,
@@ -150,7 +149,7 @@ where
         if let Some(secret_value) = get_secret_value(ss, secret_path).await {
             if let Ok(s) = hex::decode(secret_value) {
                 let (salt, bytes) = buf.split_at_mut(crypto::SALT_SIZE);
-                crypto::decrypt(bytes, &s, salt);
+                crypto::decrypt(bytes, &s.try_into().ok()?, &salt.try_into().ok()?);
                 return serde_json::from_slice(bytes).ok().flatten();
             }
         }
@@ -178,10 +177,12 @@ where
     if let Some(secret_value) = get_secret_value(ss, secret_path).await {
         if let Ok(s) = hex::decode(secret_value) {
             if let Ok(mut bytes) = serde_json::to_vec(t) {
-                let mut salt = crypto::salt(rng);
-                crypto::encrypt(&mut bytes, &s, &salt);
-                salt.extend(bytes);
-                return Some(salt);
+                let salt = crypto::salt(rng);
+                crypto::encrypt(&mut bytes, &s.try_into().ok()?, &salt);
+                let mut buf = Vec::with_capacity(SALT_SIZE + bytes.len());
+                buf.extend(salt);
+                buf.extend(bytes);
+                return Some(buf);
             }
         }
     }
