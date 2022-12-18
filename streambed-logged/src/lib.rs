@@ -1,12 +1,7 @@
-#![doc = include_str!("README.md")]
+#![doc = include_str!("../README.md")]
 
 pub mod args;
 
-use super::base64_serde;
-use crate::commit_log::{
-    CommitLog, ConsumerOffset, ConsumerRecord, Header, PartitionOffsets, ProducedOffset,
-    ProducerError, ProducerRecord, Subscription, Topic,
-};
 use async_stream::stream;
 use async_trait::async_trait;
 use bytes::{Buf, BytesMut};
@@ -19,6 +14,11 @@ use std::{
     path::{Path, PathBuf},
     pin::Pin,
     time::Duration,
+};
+use streambed::base64_serde;
+use streambed::commit_log::{
+    CommitLog, ConsumerOffset, ConsumerRecord, Header, PartitionOffsets, ProducedOffset,
+    ProducerError, ProducerRecord, Subscription, Topic,
 };
 use tokio::{
     fs::{self, File},

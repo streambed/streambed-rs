@@ -1,14 +1,13 @@
-#[path = "support/mod.rs"]
-mod support;
 use std::{convert::Infallible, time::Duration};
 
 use serde::Deserialize;
-use support::*;
+use streambed_kafka::KafkaRestCommitLog;
 
 use async_stream::stream;
 use reqwest::Url;
 use serde_json::json;
-use streambed::{commit_log::*, kafka::KafkaRestCommitLog};
+use streambed::commit_log::*;
+use streambed_test::server;
 use tokio_stream::StreamExt;
 
 #[tokio::test]

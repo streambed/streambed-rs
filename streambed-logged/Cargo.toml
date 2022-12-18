@@ -1,0 +1,25 @@
+[package]
+name = "streambed-logged"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-stream = { workspace = true }
+async-trait = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+clap = { workspace = true, features = ["derive", "env"] }
+humantime = { workspace = true }
+log = { workspace = true }
+metrics = { workspace = true, default-features = false }
+postcard = { workspace = true, default-features = false, features = ["use-std"] }
+serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["full"] }
+tokio-stream = { workspace = true }
+tokio-util = { workspace = true, features = ["codec"] }
+
+streambed = { path = "../streambed" }
+
+[dev-dependencies]
+env_logger = { workspace = true }
+test-log = { workspace = true }

@@ -1,5 +1,4 @@
-//! Provides an implementation of the secret store to be used with the
-//! [Hashicorp Vault API](https://www.vaultproject.io/api-docs).
+#![doc = include_str!("../README.md")]
 
 pub mod args;
 
@@ -16,9 +15,9 @@ use reqwest::{Certificate, Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, time::Instant};
 
-use crate::{
+use streambed::{
     delayer::Delayer,
-    secret_store::{AppRoleAuthReply, Error, GetSecretReply, SecretStore},
+    secret_store::{AppRoleAuthReply, Error, GetSecretReply, SecretData, SecretStore},
 };
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -95,7 +94,7 @@ impl VaultSecretStore {
                 let task_ttl_field = ttl_field.clone();
 
                 async move {
-                    let mut delayer = Delayer::new();
+                    let mut delayer = Delayer::default();
                     loop {
                         increment_counter!("ss_get_secret_requests", SECRET_PATH_LABEL => secret_path.clone());
 
@@ -237,7 +236,7 @@ impl SecretStore for VaultSecretStore {
     async fn create_secret(
         &self,
         _secret_path: &str,
-        _secret_data: crate::secret_store::SecretData,
+        _secret_data: SecretData,
     ) -> Result<(), Error> {
         todo!()
     }

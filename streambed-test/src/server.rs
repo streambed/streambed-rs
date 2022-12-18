@@ -37,6 +37,7 @@ impl Drop for Server {
     }
 }
 
+#[allow(clippy::async_yields_async)]
 pub fn http<F, Fut>(func: F) -> Server
 where
     F: Fn(http::Request<hyper::Body>) -> Fut + Clone + Send + 'static,

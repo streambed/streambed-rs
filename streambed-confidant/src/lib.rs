@@ -1,10 +1,7 @@
-#![doc = include_str!("README.md")]
+#![doc = include_str!("../README.md")]
 
 pub mod args;
 
-use crate::secret_store::{
-    AppRoleAuthReply, AuthToken, Error, GetSecretReply, SecretData, SecretStore,
-};
 use async_trait::async_trait;
 use cache_loader_async::{
     backing::{LruCacheBacking, TtlCacheBacking, TtlMeta},
@@ -16,6 +13,9 @@ use std::{
     os::unix::prelude::{MetadataExt, PermissionsExt},
     path::PathBuf,
     time::Duration,
+};
+use streambed::secret_store::{
+    AppRoleAuthReply, AuthToken, Error, GetSecretReply, SecretData, SecretStore,
 };
 use tokio::{
     fs,
