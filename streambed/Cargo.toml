@@ -11,10 +11,12 @@ cache_loader_async = { workspace = true, features = ["lru-cache", "ttl-cache"] }
 chrono = { workspace = true, features = ["serde"] }
 exponential-backoff = { workspace = true }
 hex = { workspace = true }
+hmac = { workspace = true }
 log = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }

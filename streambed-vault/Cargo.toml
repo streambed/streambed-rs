@@ -18,6 +18,7 @@ streambed = { path = "../streambed" }
 
 [dev-dependencies]
 env_logger = { workspace = true }
+git-version = { workspace = true }
 http = { workspace = true }
 hyper = { workspace = true, default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server", "runtime"] }
 test-log = { workspace = true }

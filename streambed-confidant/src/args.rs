@@ -16,6 +16,10 @@ pub struct SsArgs {
     #[clap(env, long, default_value = "default")]
     pub ss_ns: String,
 
+    /// The Secret Store role_id to use for approle authentication.
+    #[clap(env, long)]
+    pub ss_role_id: String,
+
     /// The location of all secrets belonging to confidant. The recommendation is to
     /// create a user for confidant and a requirement is to remove group and world permissions.
     /// Then, use ACLs to express further access conditions.

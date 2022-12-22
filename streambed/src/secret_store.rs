@@ -33,6 +33,12 @@ pub struct SecretData {
     pub data: HashMap<String, String>,
 }
 
+/// The reply to a userpass authentication
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct UserPassAuthReply {
+    pub auth: AuthToken,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
     /// The secret store is not authenticated.
@@ -57,4 +63,22 @@ pub trait SecretStore {
     /// the client is unauthorized to obtain it - either due to authorization
     /// or it may just not exist.
     async fn get_secret(&self, secret_path: &str) -> Result<Option<GetSecretReply>, Error>;
+
+    /// Given a token, authenticate the secret store.
+    async fn token_auth(&self, token: &str) -> Result<(), Error>;
+
+    /// Perform an app authentication given a username and password.
+    async fn userpass_auth(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<UserPassAuthReply, Error>;
+
+    /// Updates a username and password.
+    async fn userpass_create_update_user(
+        &self,
+        current_username: &str,
+        username: &str,
+        password: &str,
+    ) -> Result<(), Error>;
 }
