@@ -9,10 +9,11 @@ use cache_loader_async::{
 };
 use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
+#[cfg(unix)]
+use std::os::unix::prelude::{MetadataExt, PermissionsExt};
 use std::{
     collections::HashMap,
     io::ErrorKind,
-    os::unix::prelude::{MetadataExt, PermissionsExt},
     path::PathBuf,
     time::{Duration, SystemTime},
 };
@@ -207,6 +208,7 @@ impl SecretStore for FileSecretStore {
 
     async fn create_secret(&self, secret_path: &str, secret_data: SecretData) -> Result<(), Error> {
         match fs::metadata(&self.root_path).await {
+            #[cfg(unix)]
             Ok(attrs) if attrs.permissions().mode() & 0o077 != 0 => Err(Error::Unauthorized),
             Ok(attrs) => {
                 let mut result = Err(Error::Unauthorized);
@@ -216,13 +218,14 @@ impl SecretStore for FileSecretStore {
                     let _ = fs::create_dir_all(parent).await;
                 }
 
-                if let Ok(mut file) = fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .mode(attrs.mode())
-                    .open(path)
-                    .await
+                let mut file_options = fs::OpenOptions::new();
+                let mut open_options = file_options.create(true).write(true);
+                #[cfg(unix)]
                 {
+                    open_options = open_options.mode(attrs.mode());
+                }
+
+                if let Ok(mut file) = open_options.open(path).await {
                     let stored = StorableSecretData {
                         version: 0,
                         secret_data,
@@ -251,6 +254,7 @@ impl SecretStore for FileSecretStore {
 
     async fn get_secret(&self, secret_path: &str) -> Result<Option<GetSecretReply>, Error> {
         match fs::metadata(&self.root_path).await {
+            #[cfg(unix)]
             Ok(attrs) if attrs.permissions().mode() & 0o077 != 0 => Err(Error::Unauthorized),
             Ok(_) => self
                 .cache
@@ -353,6 +357,7 @@ mod tests {
     use super::*;
 
     #[test(tokio::test)]
+    #[cfg(unix)]
     async fn test_set_get_secret() {
         let confidant_dir = env::temp_dir().join("test_set_get_secret");
         let _ = fs::remove_dir_all(&confidant_dir).await;
