@@ -1567,7 +1567,6 @@ dependencies = [
  "env_logger",
  "humantime",
  "log",
- "metrics",
  "postcard",
  "serde",
  "streambed",
