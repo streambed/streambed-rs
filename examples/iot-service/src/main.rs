@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("IoT service ready");
 
-    database::task(cl, database_command_rx).await;
-
-    Ok(())
+    tokio::spawn(async { database::task(cl, database_command_rx).await })
+        .await
+        .map_err(|e| e.into())
 }

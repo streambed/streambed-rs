@@ -21,5 +21,10 @@ tokio-util = { workspace = true, features = ["codec"] }
 streambed = { path = "../streambed" }
 
 [dev-dependencies]
+criterion = { workspace = true, features = ["async_tokio", "html_reports"] }
 env_logger = { workspace = true }
 test-log = { workspace = true }
+
+[[bench]]
+name = "benches"
+harness = false
