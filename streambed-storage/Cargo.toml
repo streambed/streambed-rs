@@ -1,0 +1,15 @@
+[package]
+name = "streambed-storage"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+humantime = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+
+streambed = { path = "../streambed" }

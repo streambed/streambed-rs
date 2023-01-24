@@ -1578,6 +1578,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "streambed-storage"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "clap",
+ "humantime",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "streambed",
+ "tokio",
+]
+
+[[package]]
 name = "streambed-test"
 version = "0.1.0"
 dependencies = [
