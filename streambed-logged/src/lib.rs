@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use bytes::{Buf, BytesMut};
 use chrono::{DateTime, Utc};
 use log::{trace, warn};
-use metrics::increment_counter;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -32,7 +31,6 @@ use tokio_util::codec::Decoder;
 const CONSUMER_QUEUE_SIZE: usize = 10;
 const PRODUCER_QUEUE_SIZE: usize = 10;
 const TOPIC_FILE_CONSUMER_POLL: Duration = Duration::from_secs(1);
-const TOPIC_LABEL: &str = "topic";
 
 /// A commit log implementation that uses the file system as its
 /// backing store.
@@ -100,7 +98,6 @@ impl FileLog {
                                 topic_files.get_mut(&record.topic)
                             } else {
                                 warn!("Error when trying to append to a file: {:?}", topic_file);
-                                increment_counter!("producer_append_failures");
                                 None
                             }
                         };
@@ -117,7 +114,6 @@ impl FileLog {
                             if let Ok(buf) = postcard::to_stdvec(&storable_record) {
                                 if topic_file.write_all(&buf).await.is_ok() {
                                     trace!("Produced record: {:?}", storable_record);
-                                    increment_counter!("produced_records",  TOPIC_LABEL => record.topic.to_owned());
                                     result = Ok(ProducedOffset {
                                         offset: next_offset,
                                     });
@@ -250,7 +246,6 @@ impl CommitLog for FileLog {
                                             };
 
                                             trace!("Consumed record: {:?}", consumer_record);
-                                            increment_counter!("consumed_records",  TOPIC_LABEL => task_topic.clone());
 
                                             if task_tx.send(consumer_record).await.is_err() {
                                                 break 'outer;
@@ -266,7 +261,6 @@ impl CommitLog for FileLog {
                                     Ok(None) => (),
                                     Err(e) => {
                                         warn!("Error consuming topic file: {e} - aborting subscription for {task_topic}");
-                                        increment_counter!("subscription_failures", TOPIC_LABEL => task_topic.clone());
                                         break 'outer;
                                     }
                                 }
@@ -277,7 +271,6 @@ impl CommitLog for FileLog {
                         }
                         Err(e) => {
                             warn!("Error reading topic file: {e} - aborting subscription");
-                            increment_counter!("subscription_failures", TOPIC_LABEL => task_topic.clone());
                         }
                     }
                 }
