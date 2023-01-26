@@ -149,7 +149,7 @@ mod tests {
         }
         "#;
         assert_eq!(
-            serde_json::from_str::<Consumer>(&json).unwrap(),
+            serde_json::from_str::<Consumer>(json).unwrap(),
             Consumer {
                 offsets: vec![],
                 subscriptions: vec![]
@@ -166,7 +166,7 @@ mod tests {
         }
         "#;
         assert_eq!(
-            serde_json::from_str::<Consumer>(&json).unwrap(),
+            serde_json::from_str::<Consumer>(json).unwrap(),
             Consumer {
                 offsets: vec![],
                 subscriptions: vec![]
@@ -183,7 +183,7 @@ mod tests {
         }
         "#;
         assert_eq!(
-            serde_json::from_str::<Consumer>(&json).unwrap(),
+            serde_json::from_str::<Consumer>(json).unwrap(),
             Consumer {
                 offsets: vec![ConsumerOffset {
                     topic: "topic".to_string(),

@@ -76,10 +76,7 @@ impl CommitLog for KafkaRestCommitLog {
                 .client
                 .get(
                     self.server
-                        .join(&format!(
-                            "/topics/{}/partitions/{}/offsets",
-                            topic, partition
-                        ))
+                        .join(&format!("/topics/{topic}/partitions/{partition}/offsets"))
                         .unwrap(),
                 )
                 .send()
