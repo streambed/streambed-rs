@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Some(
             streambed::pem_from_file(&path)
                 .await
-                .unwrap_or_else(|_| panic!("Cannot find ss_server_cert_path at {:?}", path)),
+                .unwrap_or_else(|_| panic!("Cannot find ss_server_cert_path at {path:?}")),
         )
     } else {
         None

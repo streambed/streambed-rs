@@ -242,7 +242,8 @@ impl SecretStore for FileSecretStore {
 
                         if file.write_all(&buf).await.is_ok() {
                             result = Ok(());
-                            let _ = self.cache.remove(secret_path.to_string()); // We should be able to read our writes
+                            // We should be able to read our writes
+                            let _ = self.cache.remove(secret_path.to_string()).await;
                         }
                     }
                 }
@@ -271,7 +272,7 @@ impl SecretStore for FileSecretStore {
         password: &str,
     ) -> Result<UserPassAuthReply, Error> {
         if let Ok(Some(data)) = self
-            .get_secret(&format!("auth/userpass/users/{}", username))
+            .get_secret(&format!("auth/userpass/users/{username}"))
             .await
         {
             if let Some(data_password) = data.data.data.get("password") {
@@ -288,14 +289,13 @@ impl SecretStore for FileSecretStore {
                                 .map(|t| t.as_millis())
                                 .unwrap_or(0);
                             let data =
-                                format!(r#"{{"username":"{}","expires":{}}}"#, username, expires);
+                                format!(r#"{{"username":"{username}","expires":{expires}}}"#);
                             let signature =
                                 hex::encode(crypto::sign(data.as_bytes(), &self.root_secret));
                             return Ok(UserPassAuthReply {
                                 auth: AuthToken {
                                     client_token: base64::encode(format!(
-                                        r#"{{"data":{},"signature":"{}"}}"#,
-                                        data, signature
+                                        r#"{{"data":{data},"signature":"{signature}"}}"#
                                     )),
                                     lease_duration: USERPASS_LEASE_TIME.as_secs(),
                                 },
@@ -342,7 +342,7 @@ impl SecretStore for FileSecretStore {
         let mut data = HashMap::new();
         data.insert("password".to_string(), hex::encode(password));
         let data = SecretData { data };
-        self.create_secret(&format!("auth/userpass/users/{}", username), data)
+        self.create_secret(&format!("auth/userpass/users/{username}"), data)
             .await
     }
 }
@@ -429,7 +429,7 @@ mod tests {
 
         // Auth login from the previous valid userpass token
         let token_ss = FileSecretStore::with_new_auth_prepared(&ss);
-        let _ = token_ss
+        token_ss
             .token_auth(&userpass_auth.auth.client_token)
             .await
             .unwrap();

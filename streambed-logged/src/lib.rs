@@ -330,7 +330,7 @@ mod tests {
         let logged_dir = logged_dir.to_string_lossy().to_string();
         let _ = fs::remove_dir_all(&logged_dir).await;
         let _ = fs::create_dir_all(&logged_dir).await;
-        println!("Writing to {}", logged_dir);
+        println!("Writing to {logged_dir}");
 
         let cl = FileLog::new(logged_dir);
         let task_cl = cl.clone();

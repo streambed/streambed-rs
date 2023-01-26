@@ -135,7 +135,7 @@ impl VaultSecretStore {
 
                         let mut builder = task_client.get(
                             task_server
-                                .join(&format!("{}v1/secret/data/{}", task_server, secret_path))
+                                .join(&format!("{task_server}v1/secret/data/{secret_path}"))
                                 .unwrap(),
                         );
                         if let Some(client_token) = task_client_token.lock().await.as_deref() {
