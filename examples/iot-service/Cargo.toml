@@ -1,0 +1,29 @@
+[package]
+name = "iot-service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-stream = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+ciborium = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+env_logger = { workspace = true }
+git-version =  { workspace = true }
+hex = { workspace = true }
+humantime = { workspace = true }
+log = { workspace = true }
+postcard = { workspace = true, default-features = false, features = ["use-std"] }
+scopeguard = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["full"] }
+tokio-stream = { workspace = true }
+tokio-util = { workspace = true, features = ["codec"] }
+warp = { workspace = true }
+
+streambed = { path = "../../streambed" }
+streambed-logged = { path = "../../streambed-logged" }
+
+[dev-dependencies]
+env_logger = { workspace = true }
+test-log = { workspace = true }
