@@ -5,6 +5,7 @@ members = [
     "streambed-confidant",
     "streambed-kafka",
     "streambed-logged",
+    "streambed-patterns",
     "streambed-storage",
     "streambed-test",
     "streambed-vault",

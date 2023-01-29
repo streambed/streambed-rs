@@ -1,0 +1,8 @@
+[package]
+name = "streambed-patterns"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
