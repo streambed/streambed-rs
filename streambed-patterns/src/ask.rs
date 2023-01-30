@@ -23,11 +23,9 @@ impl Error for AskError {}
 #[async_trait]
 pub trait Ask<A> {
     /// The ask pattern is a way to send a message and get a response back.
-    async fn ask<R>(
-        &self,
-        f: impl FnOnce(Box<dyn FnOnce(R) + Send>) -> A + Send,
-    ) -> Result<R, AskError>
+    async fn ask<F, R>(&self, f: F) -> Result<R, AskError>
     where
+        F: FnOnce(Box<dyn FnOnce(R) + Send>) -> A + Send,
         R: Send + 'static;
 }
 
@@ -38,11 +36,9 @@ where
 {
     /// This implementation of the ask pattern sends a message to a [tokio::sync::mpsc::Sender<_>]
     /// and uses a [tokio::sync::oneshot] channel internally to convey the response.
-    async fn ask<R>(
-        &self,
-        f: impl FnOnce(Box<dyn FnOnce(R) + Send>) -> A + Send,
-    ) -> Result<R, AskError>
+    async fn ask<F, R>(&self, f: F) -> Result<R, AskError>
     where
+        F: FnOnce(Box<dyn FnOnce(R) + Send>) -> A + Send,
         R: Send + 'static,
     {
         let (reply_to, receiver) = oneshot::channel();
