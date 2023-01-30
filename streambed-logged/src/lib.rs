@@ -8,13 +8,13 @@ use bytes::{Buf, BytesMut};
 use chrono::{DateTime, Utc};
 use log::{trace, warn};
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, TimestampSecondsWithFrac};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     pin::Pin,
     time::Duration,
 };
-use streambed::base64_serde;
 use streambed::commit_log::{
     CommitLog, ConsumerOffset, ConsumerRecord, Header, PartitionOffsets, ProducedOffset,
     ProducerError, ProducerRecord, Subscription, Topic,
@@ -50,12 +50,19 @@ pub struct FileLog {
 }
 
 #[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
+pub struct StorableHeader {
+    key: String,
+    value: Vec<u8>,
+}
+
+#[serde_as]
+#[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
 struct StorableRecord {
     version: u32,
-    headers: Vec<Header>,
+    headers: Vec<StorableHeader>,
+    #[serde_as(as = "Option<TimestampSecondsWithFrac>")]
     timestamp: Option<DateTime<Utc>>,
     key: u64,
-    #[serde(with = "base64_serde")]
     value: Vec<u8>,
     offset: u64,
 }
@@ -105,7 +112,14 @@ impl FileLog {
                         if let Some(topic_file) = topic_file {
                             let storable_record = StorableRecord {
                                 version: 0,
-                                headers: record.headers,
+                                headers: record
+                                    .headers
+                                    .into_iter()
+                                    .map(|h| StorableHeader {
+                                        key: h.key,
+                                        value: h.value,
+                                    })
+                                    .collect(),
                                 timestamp: record.timestamp,
                                 key: record.key,
                                 value: record.value,
@@ -237,7 +251,14 @@ impl CommitLog for FileLog {
                                         {
                                             let consumer_record = ConsumerRecord {
                                                 topic: task_topic.clone(),
-                                                headers: record.headers,
+                                                headers: record
+                                                    .headers
+                                                    .into_iter()
+                                                    .map(|h| Header {
+                                                        key: h.key,
+                                                        value: h.value,
+                                                    })
+                                                    .collect(),
                                                 timestamp: record.timestamp,
                                                 key: record.key,
                                                 value: record.value,

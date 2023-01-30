@@ -7,12 +7,13 @@ edition = "2021"
 async-stream = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
-chrono = { workspace = true, features = ["serde"] }
+chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 humantime = { workspace = true }
 log = { workspace = true }
 postcard = { workspace = true, default-features = false, features = ["use-std"] }
 serde = { workspace = true, features = ["derive"] }
+serde_with = { workspace = true, features = ["chrono_0_4"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["codec"] }

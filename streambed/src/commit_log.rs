@@ -8,10 +8,10 @@
 
 use std::{pin::Pin, time::Duration};
 
-use super::base64_serde;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
+use serde_with::{base64::Base64, serde_as};
 use tokio_stream::Stream;
 
 /// A topic to subscribe to or has been subscribed to. Topics
@@ -22,11 +22,12 @@ pub type Topic = String;
 
 /// A header provides a means of augmenting a record with
 /// meta-data.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Header {
-    key: String,
-    #[serde(with = "base64_serde")]
-    value: Vec<u8>,
+    pub key: String,
+    #[serde_as(as = "Base64")]
+    pub value: Vec<u8>,
 }
 
 /// A declaration of an offset to be committed to a topic.
@@ -58,6 +59,7 @@ pub struct Consumer {
 }
 
 /// A declaration of a record produced by a subscription
+#[serde_as]
 #[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
 pub struct ConsumerRecord {
     pub topic: Topic,
@@ -65,7 +67,7 @@ pub struct ConsumerRecord {
     pub headers: Vec<Header>,
     pub timestamp: Option<DateTime<Utc>>,
     pub key: u64,
-    #[serde(with = "base64_serde")]
+    #[serde_as(as = "Base64")]
     pub value: Vec<u8>,
     pub partition: u32,
     pub offset: u64,
@@ -79,6 +81,7 @@ pub struct PartitionOffsets {
 }
 
 /// A declaration of a record to be produced to a topic
+#[serde_as]
 #[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
 pub struct ProducerRecord {
     pub topic: Topic,
@@ -86,7 +89,7 @@ pub struct ProducerRecord {
     pub headers: Vec<Header>,
     pub timestamp: Option<DateTime<Utc>>,
     pub key: u64,
-    #[serde(with = "base64_serde")]
+    #[serde_as(as = "Base64")]
     pub value: Vec<u8>,
     pub partition: u32,
 }

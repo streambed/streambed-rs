@@ -18,7 +18,6 @@ use tokio::{
     io::{self, AsyncReadExt, BufReader},
 };
 
-pub mod base64_serde;
 pub mod commit_log;
 pub mod crypto;
 pub mod delayer;
