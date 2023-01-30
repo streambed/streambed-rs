@@ -23,6 +23,7 @@ warp = { workspace = true }
 
 streambed = { path = "../../streambed" }
 streambed-logged = { path = "../../streambed-logged" }
+streambed-patterns = { path = "../../streambed-patterns" }
 
 [dev-dependencies]
 env_logger = { workspace = true }

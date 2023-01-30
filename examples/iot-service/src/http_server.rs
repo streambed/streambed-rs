@@ -1,11 +1,10 @@
 //! Handle http serving concerns
 //!
-use std::collections::HashMap;
-
-use tokio::sync::{mpsc, oneshot};
-use warp::{hyper::StatusCode, Filter, Rejection, Reply};
-
 use crate::database;
+use std::collections::HashMap;
+use streambed_patterns::ask::Ask;
+use tokio::sync::mpsc;
+use warp::{hyper::StatusCode, Filter, Rejection, Reply};
 
 /// Declares routes to serve our HTTP interface.
 pub fn routes(
@@ -33,29 +32,16 @@ pub fn routes(
                         )
                     };
 
-                    let (tx, rx) = oneshot::channel();
-                    let reply_to = Box::new(|events| {
-                        let _ = tx.send(events);
-                    });
-                    if task_database_command_tx
-                        .send(database::Command::Get(id, reply_to))
-                        .await
-                        .is_ok()
-                    {
-                        let Ok(events) = rx.await else {
+                    let Ok(events) = task_database_command_tx
+                        .ask(|reply_to| database::Command::Get(id, reply_to))
+                        .await else {
                             return warp::reply::with_status(
                                 warp::reply::json(&"Service unavailable"),
                                 StatusCode::SERVICE_UNAVAILABLE,
                             )
                          };
 
-                        warp::reply::with_status(warp::reply::json(&events), StatusCode::OK)
-                    } else {
-                        warp::reply::with_status(
-                            warp::reply::json(&"Service unavailable"),
-                            StatusCode::SERVICE_UNAVAILABLE,
-                        )
-                    }
+                    warp::reply::with_status(warp::reply::json(&events), StatusCode::OK)
                 }
             })
     };
