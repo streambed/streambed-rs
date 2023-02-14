@@ -14,11 +14,27 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{base64::Base64, serde_as};
 use tokio_stream::Stream;
 
+/// An offset into a commit log. Offsets are used to address
+/// records and can be relied on to have an ascending order.
+pub type Offset = u64;
+
+/// Each record in a commit log has a key. How the key is formed
+/// is an application concern. By way of an example, keys can be
+/// used to associate to an entity.
+pub type Key = u64;
+
+/// Topics can be distributed into partitions which, in turn,
+/// enable scaling.
+pub type Partition = u32;
+
 /// A topic to subscribe to or has been subscribed to. Topics
 /// may be namespaced by prefixing with characters followed by
 /// a `:`. For example, "my-ns:my-topic". In the absence of
 /// a namespace, the server will assume a default namespace.
 pub type Topic = String;
+
+/// A ref to a topic
+pub type TopicRef<'a> = &'a str;
 
 /// A header provides a means of augmenting a record with
 /// meta-data.
@@ -34,8 +50,8 @@ pub struct Header {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ConsumerOffset {
     pub topic: Topic,
-    pub partition: u32,
-    pub offset: u64,
+    pub partition: Partition,
+    pub offset: Offset,
 }
 
 /// A declaration of a topic to subscribe to
@@ -66,18 +82,18 @@ pub struct ConsumerRecord {
     #[serde(deserialize_with = "nullable_vec")]
     pub headers: Vec<Header>,
     pub timestamp: Option<DateTime<Utc>>,
-    pub key: u64,
+    pub key: Key,
     #[serde_as(as = "Base64")]
     pub value: Vec<u8>,
-    pub partition: u32,
-    pub offset: u64,
+    pub partition: Partition,
+    pub offset: Offset,
 }
 
 /// The reply to an offsets request
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PartitionOffsets {
-    pub beginning_offset: u64,
-    pub end_offset: u64,
+    pub beginning_offset: Offset,
+    pub end_offset: Offset,
 }
 
 /// A declaration of a record to be produced to a topic
@@ -88,16 +104,16 @@ pub struct ProducerRecord {
     #[serde(deserialize_with = "nullable_vec")]
     pub headers: Vec<Header>,
     pub timestamp: Option<DateTime<Utc>>,
-    pub key: u64,
+    pub key: Key,
     #[serde_as(as = "Base64")]
     pub value: Vec<u8>,
-    pub partition: u32,
+    pub partition: Partition,
 }
 
 /// The reply to a publish request
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ProducedOffset {
-    pub offset: u64,
+    pub offset: Offset,
 }
 
 /// There was a problem producing a record
@@ -112,7 +128,7 @@ pub enum ProducerError {
 #[async_trait]
 pub trait CommitLog {
     /// Retrieve the current offsets of a topic if they are present.
-    async fn offsets(&self, topic: Topic, partition: u32) -> Option<PartitionOffsets>;
+    async fn offsets(&self, topic: Topic, partition: Partition) -> Option<PartitionOffsets>;
 
     /// Publish a record and return the offset that was assigned.
     async fn produce(&self, record: ProducerRecord) -> Result<ProducedOffset, ProducerError>;

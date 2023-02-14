@@ -3,12 +3,12 @@
 _Being event-driven closes the gap between understanding a problem domain and expressing that problem in code._
 
 Streambed is a curated set of dependencies and a toolkit for writing asynchronous event-driven services that aim to run on the 
-smallest "std" targets supported by Rust. Streambed components use a single core MIPS32 OpenWrt device running at around 500MHz 
+smallest "std" targets supported by Rust. Streambed-based programs presently use a single core MIPS32 OpenWrt device running at around 500MHz 
 and 128MiB as a baseline target.
 
-A commit log modelled on Apache Kafka is provided, along with partial and extended support for the Kafka HTTP API.
+A commit log modelled on [Apache Kafka](https://kafka.apache.org/) is provided, along with partial and extended support for the Kafka HTTP API.
 
-A secret store modelled on Hashicorp Vault is provided along with partial support for the Vault HTTP API.
+A secret store modelled on [Hashicorp Vault](https://www.vaultproject.io/) is provided along with partial support for the Vault HTTP API.
 
 Production services using the commit log and secret store have been shown to use less than 3MiB of resident memory
 while also offering good performance.
@@ -22,11 +22,11 @@ quickly rebuild their state through replaying events.
 
 ### Efficient
 
-Streambed based applications are designed to run at the edge on embedded computers as well as in the cloud and so efficient CPU and memory usage are a primary concern.
+Streambed based applications are designed to run at the edge on embedded computers as well as in the cloud and so efficient CPU, memory and disk usage are a primary concern.
 
 ### Secure
 
-Security is a primary consideration throughout the design of Streambed. For example, in the world of the Internet of Things, if an individual sensor becomes compromised then its effects can be minimized.
+Security is also a primary consideration throughout the design of Streambed. For example, in the world of the Internet of Things, if an individual sensor becomes compromised then its blast-radius can be minimized.
 
 ### Built for integration
 
@@ -47,10 +47,10 @@ Streambed leverages Rust's characteristics of writing fast and efficient softwar
 ## A brief history and why Rust
 
 Streambed-jvm first manifested itself as a Scala based-project with similar goals to streambed-rs and 
-targeted on platforms that could run a JVM. Cisco Inc. sponsored Titan Class Pty Ltd with the development of 
+targeted on larger machines that could run a JVM. Cisco Inc. sponsored Titan Class Pty Ltd with the development of 
 streambed-jvm targeting edge-based routers on farms. Titan Class continues to run streambed at 
 the edge on several Australian farms and has done so now for several years. This experience has proven out the 
-event-driven approach that manifests in Streambed. It also highlighted that more energy-efficient solutions needed 
+event-driven approach that underpins Streambed. It also highlighted that more energy-efficient solutions needed 
 to be sought given that power at the edge is a challenge. Hence the re-writing of streambed-jvm in Rust. 
 
 ## Contribution policy
