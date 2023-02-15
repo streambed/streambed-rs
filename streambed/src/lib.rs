@@ -163,20 +163,21 @@ where
 /// is encoded as a hex string of 32 characters (16 bytes)
 /// is encoded as a hex string. Any non alpha-numeric characters are
 /// also filtered out.
-pub async fn encrypt_struct<T, U>(
+pub async fn encrypt_struct<T, U, F>(
     ss: &impl secret_store::SecretStore,
     secret_path: &str,
-    rng: &mut U,
+    rng: F,
     t: &T,
 ) -> Option<Vec<u8>>
 where
     T: Serialize,
+    F: FnOnce() -> U,
     U: RngCore,
 {
     if let Some(secret_value) = get_secret_value(ss, secret_path).await {
         if let Ok(s) = hex::decode(secret_value) {
             if let Ok(mut bytes) = serde_json::to_vec(t) {
-                let salt = crypto::salt(rng);
+                let salt = crypto::salt(&mut (rng)());
                 crypto::encrypt(&mut bytes, &s.try_into().ok()?, &salt);
                 let mut buf = Vec::with_capacity(SALT_SIZE + bytes.len());
                 buf.extend(salt);

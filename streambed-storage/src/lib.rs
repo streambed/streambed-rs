@@ -36,15 +36,16 @@ where
 }
 
 /// Saves an encrypted structure described by T. Any IO errors are returned.
-pub async fn save_struct<T, U>(
+pub async fn save_struct<T, U, F>(
     state_storage_path: &Path,
     ss: &impl secret_store::SecretStore,
     secret_path: &str,
-    rng: &mut U,
+    rng: F,
     state: &T,
 ) -> Result<(), Box<dyn Error>>
 where
     T: Serialize,
+    F: FnOnce() -> U,
     U: RngCore,
 {
     if let Some(buf) = encrypt_struct(ss, secret_path, rng, state).await {
