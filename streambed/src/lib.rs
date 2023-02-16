@@ -136,7 +136,7 @@ pub async fn get_secret_value(
 /// The secret is expected to reside in a data field named "value" and
 /// is encoded as a hex string of 32 characters (16 bytes)
 /// The buffer is expected to contain both the salt and the bytes to be decrypted.
-pub async fn decrypt_buf<'a, T, D>(
+pub async fn decrypt_buf<'a, T, D, DE>(
     ss: &impl secret_store::SecretStore,
     secret_path: &str,
     buf: &'a mut [u8],
@@ -144,14 +144,14 @@ pub async fn decrypt_buf<'a, T, D>(
 ) -> Option<T>
 where
     T: Deserialize<'a>,
-    D: FnOnce(&'a [u8]) -> Option<T>,
+    D: FnOnce(&'a [u8]) -> Result<T, DE>,
 {
     if buf.len() >= crypto::SALT_SIZE {
         if let Some(secret_value) = get_secret_value(ss, secret_path).await {
             if let Ok(s) = hex::decode(secret_value) {
                 let (salt, bytes) = buf.split_at_mut(crypto::SALT_SIZE);
                 crypto::decrypt(bytes, &s.try_into().ok()?, &salt.try_into().ok()?);
-                return deserialize(bytes);
+                return deserialize(bytes).ok();
             }
         }
     }
@@ -165,7 +165,7 @@ where
 /// is encoded as a hex string of 32 characters (16 bytes)
 /// is encoded as a hex string. Any non alpha-numeric characters are
 /// also filtered out.
-pub async fn encrypt_struct<T, U, F, S>(
+pub async fn encrypt_struct<T, U, F, S, SE>(
     ss: &impl secret_store::SecretStore,
     secret_path: &str,
     serialize: S,
@@ -174,13 +174,13 @@ pub async fn encrypt_struct<T, U, F, S>(
 ) -> Option<Vec<u8>>
 where
     T: Serialize,
-    S: FnOnce(&T) -> Option<Vec<u8>>,
+    S: FnOnce(&T) -> Result<Vec<u8>, SE>,
     F: FnOnce() -> U,
     U: RngCore,
 {
     if let Some(secret_value) = get_secret_value(ss, secret_path).await {
         if let Ok(s) = hex::decode(secret_value) {
-            if let Some(mut bytes) = serialize(t) {
+            if let Ok(mut bytes) = serialize(t) {
                 let salt = crypto::salt(&mut (rng)());
                 crypto::encrypt(&mut bytes, &s.try_into().ok()?, &salt);
                 let mut buf = Vec::with_capacity(SALT_SIZE + bytes.len());
