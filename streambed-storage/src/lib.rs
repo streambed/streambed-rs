@@ -16,7 +16,7 @@ use tokio::{
 /// as an error. Beyond IO, state is attempted to be decrypted and deserialized when present.
 /// Any issues there cause the default representation of the structure to be returned. The default
 /// structure is also returned where there is no file present in the first place.
-pub async fn load_struct<T, D>(
+pub async fn load_struct<T, D, DE>(
     state_storage_path: &Path,
     ss: &impl secret_store::SecretStore,
     secret_path: &str,
@@ -24,7 +24,7 @@ pub async fn load_struct<T, D>(
 ) -> Result<T, Box<dyn Error>>
 where
     T: Default + DeserializeOwned,
-    D: FnOnce(&[u8]) -> Option<T>,
+    D: FnOnce(&[u8]) -> Result<T, DE>,
 {
     if let Ok(mut f) = fs::File::open(state_storage_path).await {
         let mut buf = vec![];
@@ -38,7 +38,7 @@ where
 }
 
 /// Saves an encrypted structure described by T. Any IO errors are returned.
-pub async fn save_struct<T, U, F, S>(
+pub async fn save_struct<T, U, F, S, SE>(
     state_storage_path: &Path,
     ss: &impl secret_store::SecretStore,
     secret_path: &str,
@@ -48,7 +48,7 @@ pub async fn save_struct<T, U, F, S>(
 ) -> Result<(), Box<dyn Error>>
 where
     T: Serialize,
-    S: FnOnce(&T) -> Option<Vec<u8>>,
+    S: FnOnce(&T) -> Result<Vec<u8>, SE>,
     F: FnOnce() -> U,
     U: RngCore,
 {
