@@ -131,25 +131,27 @@ pub async fn get_secret_value(
 }
 
 /// Given a secret store, a path to a secret, and a byte buffer to be decrypted,
-/// decrypt it in place. Returns a JSON decoded structure if decryption
+/// decrypt it in place. Returns a decoded structure if decryption
 /// was successful.
 /// The secret is expected to reside in a data field named "value" and
 /// is encoded as a hex string of 32 characters (16 bytes)
 /// The buffer is expected to contain both the salt and the bytes to be decrypted.
-pub async fn decrypt_buf<'a, T>(
+pub async fn decrypt_buf<'a, T, D>(
     ss: &impl secret_store::SecretStore,
     secret_path: &str,
     buf: &'a mut [u8],
+    deserialize: D,
 ) -> Option<T>
 where
     T: Deserialize<'a>,
+    D: FnOnce(&'a mut [u8]) -> Option<T>,
 {
     if buf.len() >= crypto::SALT_SIZE {
         if let Some(secret_value) = get_secret_value(ss, secret_path).await {
             if let Ok(s) = hex::decode(secret_value) {
                 let (salt, bytes) = buf.split_at_mut(crypto::SALT_SIZE);
                 crypto::decrypt(bytes, &s.try_into().ok()?, &salt.try_into().ok()?);
-                return serde_json::from_slice(bytes).ok().flatten();
+                return deserialize(bytes);
             }
         }
     }
@@ -157,26 +159,28 @@ where
 }
 
 /// Given a secret store, a path to a secret, and a type to be encrypted,
-/// serialize to JSON and then encrypt it.
+/// serialize and then encrypt it.
 /// Returns an encrypted buffer prefixed with a random salt if successful.
 /// The secret is expected to reside in a data field named "value" and
 /// is encoded as a hex string of 32 characters (16 bytes)
 /// is encoded as a hex string. Any non alpha-numeric characters are
 /// also filtered out.
-pub async fn encrypt_struct<T, U, F>(
+pub async fn encrypt_struct<T, U, F, S>(
     ss: &impl secret_store::SecretStore,
     secret_path: &str,
+    serialize: S,
     rng: F,
     t: &T,
 ) -> Option<Vec<u8>>
 where
     T: Serialize,
+    S: FnOnce(&T) -> Option<Vec<u8>>,
     F: FnOnce() -> U,
     U: RngCore,
 {
     if let Some(secret_value) = get_secret_value(ss, secret_path).await {
         if let Ok(s) = hex::decode(secret_value) {
-            if let Ok(mut bytes) = serde_json::to_vec(t) {
+            if let Some(mut bytes) = serialize(t) {
                 let salt = crypto::salt(&mut (rng)());
                 crypto::encrypt(&mut bytes, &s.try_into().ok()?, &salt);
                 let mut buf = Vec::with_capacity(SALT_SIZE + bytes.len());
