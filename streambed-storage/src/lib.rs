@@ -24,7 +24,7 @@ pub async fn load_struct<T, D>(
 ) -> Result<T, Box<dyn Error>>
 where
     T: Default + DeserializeOwned,
-    D: FnOnce(&mut [u8]) -> Option<T>,
+    D: FnOnce(&[u8]) -> Option<T>,
 {
     if let Ok(mut f) = fs::File::open(state_storage_path).await {
         let mut buf = vec![];

@@ -144,7 +144,7 @@ pub async fn decrypt_buf<'a, T, D>(
 ) -> Option<T>
 where
     T: Deserialize<'a>,
-    D: FnOnce(&'a mut [u8]) -> Option<T>,
+    D: FnOnce(&'a [u8]) -> Option<T>,
 {
     if buf.len() >= crypto::SALT_SIZE {
         if let Some(secret_value) = get_secret_value(ss, secret_path).await {
