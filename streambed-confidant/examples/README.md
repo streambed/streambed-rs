@@ -14,7 +14,7 @@ The service can then be invoked:
 
 ```
 echo -n "01234567890123456789012345678912some-secret-id" | \
-RUST_LOG=debug cargo run --example main -- \
+RUST_LOG=debug cargo run --example confidant -- \
   --ss-role-id="my-great-service" \
   --ss-root-path="/tmp/confidant"
 ```

@@ -50,7 +50,7 @@ The service can then be invoked:
 
 ```
 echo -n $SECRET_ID | \
-RUST_LOG=debug cargo run --example main -- \
+RUST_LOG=debug cargo run --example vault -- \
   --ss-server="http://localhost:8200" \
   --ss-ttl-field="ttl" \
   --ss-role-id=$ROLE_ID
