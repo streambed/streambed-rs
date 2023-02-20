@@ -126,7 +126,7 @@ pub enum ProducerError {
 /// A commit log holds topics and can be appended to and tailed.
 /// Connections are managed and retried if they cannot be established.
 #[async_trait]
-pub trait CommitLog {
+pub trait CommitLog: Clone + Send + Sync {
     /// Retrieve the current offsets of a topic if they are present.
     async fn offsets(&self, topic: Topic, partition: Partition) -> Option<PartitionOffsets>;
 
