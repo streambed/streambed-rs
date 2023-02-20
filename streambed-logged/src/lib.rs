@@ -253,7 +253,7 @@ impl CommitLog for FileLog {
                 drop(locked_producer_map); // drop early so we don't double-lock with the next thing
 
                 let Ok(mut locked_topic_file_ops) = self.topic_file_ops.lock() else {return Err(ProducerError::CannotProduce)};
-                let topic_file_op = acquire_topic_file_ops(
+                let mut topic_file_op = acquire_topic_file_ops(
                     &self.root_path,
                     &record.topic,
                     &mut locked_topic_file_ops,
@@ -265,8 +265,6 @@ impl CommitLog for FileLog {
                     .flatten()
                     .map_or(0, |offsets| offsets.end_offset.wrapping_add(1));
 
-                let mut file_size = topic_file_op.active_file_size().unwrap_or_default();
-
                 let task_root_path = self.root_path.clone();
                 let task_compactor_txs = self.compactor_txs.clone();
                 let task_topic_file_ops = self.topic_file_ops.clone();
@@ -274,6 +272,10 @@ impl CommitLog for FileLog {
 
                 let mut open_options = fs::OpenOptions::new();
                 open_options.append(true).create(true);
+
+                let mut file_size = topic_file_op
+                    .active_file_size(&open_options, task_write_buffer_size)
+                    .unwrap_or_default();
 
                 tokio::spawn({
                     async move {
