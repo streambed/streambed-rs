@@ -160,7 +160,7 @@ impl FileLog {
         compaction_strategy: CS,
     ) -> Result<(), CompactionRegistrationError>
     where
-        CS: CompactionStrategy + Send + 'static,
+        CS: CompactionStrategy + Send + Sync + 'static,
     {
         let topic_file_op = {
             let Ok(mut locked_topic_file_ops) = self.topic_file_ops.lock() else {return Err(CompactionRegistrationError)};

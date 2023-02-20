@@ -21,6 +21,7 @@ pub struct MaxKeysReached(pub bool);
 /// and ultimately determine, for each record key, what the earliest offset is
 /// that may be retained. Upon the consumer completing, logged will then proceed
 /// to remove unwanted records from the commit log.
+#[async_trait]
 pub trait CompactionStrategy {
     /// The state to manage throughout a compaction run.
     type S: Debug + Send;
@@ -40,7 +41,7 @@ pub trait CompactionStrategy {
     }
 
     /// Produce the initial state for the reducer function.
-    fn init(&self) -> Self::S;
+    async fn init(&self) -> Self::S;
 
     /// The reducer function receives a mutable state reference, a key and a consumer
     /// record, and returns a bool indicating whether the function has
@@ -82,10 +83,11 @@ impl KeyBasedRetention {
 /// The state associated with key based retention.
 pub type KeyBasedRetentionState = (CompactionMap, usize);
 
+#[async_trait]
 impl CompactionStrategy for KeyBasedRetention {
     type S = KeyBasedRetentionState;
 
-    fn init(&self) -> KeyBasedRetentionState {
+    async fn init(&self) -> KeyBasedRetentionState {
         (
             CompactionMap::with_capacity(self.max_compaction_keys),
             self.max_compaction_keys,
@@ -141,10 +143,11 @@ impl NthKeyBasedRetention {
 /// The state associated with nth key based retention.
 pub type NthKeyBasedRetentionState = (HashMap<Key, VecDeque<Offset>>, usize, usize);
 
+#[async_trait]
 impl CompactionStrategy for NthKeyBasedRetention {
     type S = NthKeyBasedRetentionState;
 
-    fn init(&self) -> NthKeyBasedRetentionState {
+    async fn init(&self) -> NthKeyBasedRetentionState {
         (
             HashMap::with_capacity(self.max_compaction_keys),
             self.max_compaction_keys,
@@ -412,7 +415,7 @@ where
                     let r = self.topic_storage_ops.age_active();
                     if let Ok(Some(end_offset)) = r {
                         let task_scoped_topic_subscriber = self.scoped_topic_subscriber.clone();
-                        let task_init = self.compaction_strategy.init();
+                        let task_init = self.compaction_strategy.init().await;
                         let h = tokio::spawn(async move {
                             let mut strategy_state = task_init;
                             let mut records = task_scoped_topic_subscriber.subscribe();
@@ -558,12 +561,10 @@ mod tests {
         sync::atomic::{AtomicU32, Ordering},
     };
 
-    use test_log::test;
-
     use super::*;
 
-    #[test]
-    fn test_key_based_retention() {
+    #[tokio::test]
+    async fn test_key_based_retention() {
         let topic = "my-topic";
 
         let r0 = ConsumerRecord {
@@ -601,7 +602,7 @@ mod tests {
 
         let compaction = KeyBasedRetention::new(1);
 
-        let mut state = compaction.init();
+        let mut state = compaction.init().await;
 
         assert_eq!(
             KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&r0), r0),
@@ -621,8 +622,8 @@ mod tests {
         assert_eq!(KeyBasedRetention::collect(state), expected_compactor_result);
     }
 
-    #[test]
-    fn test_nth_key_based_retention() {
+    #[tokio::test]
+    async fn test_nth_key_based_retention() {
         let topic = "my-topic";
 
         let r0 = ConsumerRecord {
@@ -670,7 +671,7 @@ mod tests {
 
         let compaction = NthKeyBasedRetention::new(1, 2);
 
-        let mut state = compaction.init();
+        let mut state = compaction.init().await;
 
         assert_eq!(
             NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&r0), r0),
@@ -796,22 +797,25 @@ mod tests {
     const MAX_TEMPERATURE_SENSOR_IDS_PER_COMPACTION: usize = 10;
     const MAX_TEMPERATURE_SENSOR_TEMPS_PER_ID: usize = 10;
 
+    #[async_trait]
     impl CompactionStrategy for TemperatureSensorTopic {
         type S = TemperatureSensorCompactionState;
 
-        fn init(&self) -> TemperatureSensorCompactionState {
+        async fn init(&self) -> TemperatureSensorCompactionState {
             TemperatureSensorCompactionState {
                 temperature_events: NthKeyBasedRetention::new(
                     MAX_TEMPERATURE_SENSOR_IDS_PER_COMPACTION,
                     MAX_TEMPERATURE_SENSOR_TEMPS_PER_ID,
                 )
-                .init(),
+                .init()
+                .await,
                 // We only have two types of event that we wish to use
                 // with key based retention: battery level and name changes.
                 remaining_events: KeyBasedRetention::new(
                     2 * MAX_TEMPERATURE_SENSOR_IDS_PER_COMPACTION,
                 )
-                .init(),
+                .init()
+                .await,
             }
         }
 
@@ -840,8 +844,8 @@ mod tests {
 
     // Now let's test all of that out!
 
-    #[test]
-    fn test_both_retention_types() {
+    #[tokio::test]
+    async fn test_both_retention_types() {
         let e0 = TemperatureSensorEvent::BatteryLevelSensed(0, 10);
         let v0 = postcard::to_stdvec(&e0).unwrap();
         let r0 = ConsumerRecord {
@@ -898,7 +902,7 @@ mod tests {
 
         let compaction = TemperatureSensorTopic;
 
-        let mut state = compaction.init();
+        let mut state = compaction.init().await;
 
         assert_eq!(
             TemperatureSensorTopic::reduce(&mut state, TemperatureSensorTopic::key(&r0), r0),
@@ -971,10 +975,11 @@ mod tests {
 
     struct TestCompactionStrategy;
 
+    #[async_trait]
     impl CompactionStrategy for TestCompactionStrategy {
         type S = CompactionMap;
 
-        fn init(&self) -> Self::S {
+        async fn init(&self) -> Self::S {
             CompactionMap::new()
         }
 
