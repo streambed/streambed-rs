@@ -29,6 +29,7 @@ use tokio::time;
 use tokio_stream::Stream;
 
 /// A commit log holds topics and can be appended to and tailed.
+#[derive(Clone)]
 pub struct KafkaRestCommitLog {
     client: Client,
     server: Url,

@@ -49,7 +49,7 @@ pub enum Error {
 /// but one that can be backended with other implementations.
 /// Connections are managed and retried if they cannot be established.
 #[async_trait]
-pub trait SecretStore {
+pub trait SecretStore: Clone + Send + Sync {
     /// Perform an app authentication given a role and secret. If successful, then the
     /// secret store will be updated with a client token thereby permitting subsequent
     /// operations including getting secrets.
