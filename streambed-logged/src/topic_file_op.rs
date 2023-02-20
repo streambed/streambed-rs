@@ -58,7 +58,14 @@ impl TopicFileOp {
         }
     }
 
-    pub fn active_file_size(&self) -> Result<u64, TopicFileOpError> {
+    pub fn active_file_size(
+        &mut self,
+        open_options: &OpenOptions,
+        write_buffer_size: usize,
+    ) -> Result<u64, TopicFileOpError> {
+        // Ensure the active file is opened for appending first.
+        let _ = self.with_active_file(open_options, write_buffer_size, |_| Ok(0))?;
+
         let Ok(mut locked_write_handle) = self.write_handle.lock() else {return Err(TopicFileOpError::CannotLock)};
         let r = if let Some(write_handle) = locked_write_handle.as_mut() {
             write_handle.get_ref().metadata().map(|m| m.len())
