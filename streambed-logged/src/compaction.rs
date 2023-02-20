@@ -9,13 +9,13 @@ use tokio_stream::StreamExt;
 const ACTIVE_FILE_CONSUMER_IDLE_TIMEOUT: Duration = Duration::from_millis(10);
 
 /// A map of keys to offsets
-type CompactionMap = HashMap<Key, Offset>;
+pub type CompactionMap = HashMap<Key, Offset>;
 
 /// Returned by a compaction reducer function when there is no capacity
 /// to process any more keys. A compactor will use this information to
 /// determine whether another compaction pass is required.
 #[derive(Debug, PartialEq, Eq)]
-pub struct MaxKeysReached(bool);
+pub struct MaxKeysReached(pub bool);
 
 /// A compactor strategy's role is to be fed consumer records for a single topic
 /// and ultimately determine, for each record key, what the earliest offset is
