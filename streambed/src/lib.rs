@@ -146,13 +146,29 @@ where
     T: Deserialize<'a>,
     D: FnOnce(&'a [u8]) -> Result<T, DE>,
 {
+    get_secret_value(ss, secret_path)
+        .await
+        .and_then(|secret_value| decrypt_buf_with_secret(secret_value, buf, deserialize))
+}
+
+/// Given a secret, and a byte buffer to be decrypted,
+/// decrypt it in place. Returns a decoded structure if decryption
+/// was successful.
+/// The buffer is expected to contain both the salt and the bytes to be decrypted.
+pub fn decrypt_buf_with_secret<'a, T, D, DE>(
+    secret_value: String,
+    buf: &'a mut [u8],
+    deserialize: D,
+) -> Option<T>
+where
+    T: Deserialize<'a>,
+    D: FnOnce(&'a [u8]) -> Result<T, DE>,
+{
     if buf.len() >= crypto::SALT_SIZE {
-        if let Some(secret_value) = get_secret_value(ss, secret_path).await {
-            if let Ok(s) = hex::decode(secret_value) {
-                let (salt, bytes) = buf.split_at_mut(crypto::SALT_SIZE);
-                crypto::decrypt(bytes, &s.try_into().ok()?, &salt.try_into().ok()?);
-                return deserialize(bytes).ok();
-            }
+        if let Ok(s) = hex::decode(secret_value) {
+            let (salt, bytes) = buf.split_at_mut(crypto::SALT_SIZE);
+            crypto::decrypt(bytes, &s.try_into().ok()?, &salt.try_into().ok()?);
+            return deserialize(bytes).ok();
         }
     }
     None
@@ -178,16 +194,34 @@ where
     F: FnOnce() -> U,
     U: RngCore,
 {
-    if let Some(secret_value) = get_secret_value(ss, secret_path).await {
-        if let Ok(s) = hex::decode(secret_value) {
-            if let Ok(mut bytes) = serialize(t) {
-                let salt = crypto::salt(&mut (rng)());
-                crypto::encrypt(&mut bytes, &s.try_into().ok()?, &salt);
-                let mut buf = Vec::with_capacity(SALT_SIZE + bytes.len());
-                buf.extend(salt);
-                buf.extend(bytes);
-                return Some(buf);
-            }
+    get_secret_value(ss, secret_path)
+        .await
+        .and_then(|secret_value| encrypt_struct_with_secret(secret_value, serialize, rng, t))
+}
+
+/// Given secret, and a type to be encrypted,
+/// serialize and then encrypt it.
+/// Returns an encrypted buffer prefixed with a random salt if successful.
+pub fn encrypt_struct_with_secret<T, U, F, S, SE>(
+    secret_value: String,
+    serialize: S,
+    rng: F,
+    t: &T,
+) -> Option<Vec<u8>>
+where
+    T: Serialize,
+    S: FnOnce(&T) -> Result<Vec<u8>, SE>,
+    F: FnOnce() -> U,
+    U: RngCore,
+{
+    if let Ok(s) = hex::decode(secret_value) {
+        if let Ok(mut bytes) = serialize(t) {
+            let salt = crypto::salt(&mut (rng)());
+            crypto::encrypt(&mut bytes, &s.try_into().ok()?, &salt);
+            let mut buf = Vec::with_capacity(SALT_SIZE + bytes.len());
+            buf.extend(salt);
+            buf.extend(bytes);
+            return Some(buf);
         }
     }
     None
