@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Setup and authenticate our service with the secret store
 
-    let line = streambed::read_line_from_stdin().await.unwrap();
+    let line = streambed::read_line(std::io::stdin()).unwrap();
     assert!(!line.is_empty(), "Cannot source a line from stdin");
     let (root_secret, ss_secret_id) = line.split_at(32);
     let root_secret = hex::decode(root_secret).unwrap();
