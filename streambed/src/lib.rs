@@ -1,43 +1,38 @@
 #![doc = include_str!("../../README.md")]
 
+use std::error::Error;
+use std::io::{self, BufRead, BufReader, Read};
 use std::sync::Arc;
 use std::time::Duration;
-use std::{error::Error, path::Path};
 
 use crypto::SALT_SIZE;
 use log::{debug, info, warn};
 use rand::RngCore;
 use reqwest::Certificate;
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncBufReadExt;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 use tokio::time;
-use tokio::{
-    fs,
-    io::{self, AsyncReadExt, BufReader},
-};
 
 pub mod commit_log;
 pub mod crypto;
 pub mod delayer;
 pub mod secret_store;
 
-/// Read a line from stdin.
-pub async fn read_line_from_stdin() -> Result<String, io::Error> {
+/// Read a line from an async reader.
+pub fn read_line<R: Read>(reader: R) -> Result<String, io::Error> {
     let mut line = String::new();
-    let mut reader = BufReader::new(io::stdin());
-    reader.read_line(&mut line).await?;
+    let mut reader = BufReader::new(reader);
+    reader.read_line(&mut line)?;
     let len = line.trim_end_matches(&['\r', '\n'][..]).len();
     line.truncate(len);
     Ok(line)
 }
 
-/// Read a file as a pem file and return its corresponding Reqwest certificate.
-pub async fn pem_from_file(path: &Path) -> Result<Certificate, Box<dyn Error>> {
-    let mut f = fs::File::open(path).await?;
+/// Read a pem file and return its corresponding Reqwest certificate.
+pub async fn read_pem<R: Read>(mut reader: R) -> Result<Certificate, Box<dyn Error>> {
     let mut buf = vec![];
-    f.read_to_end(&mut buf).await?;
+    reader.read_to_end(&mut buf)?;
     Certificate::from_pem(&buf).map_err(|e| e.into())
 }
 

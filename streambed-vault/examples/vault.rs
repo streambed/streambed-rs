@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Setup and authenticate our service with the secret store
 
-    let ss_secret_id = streambed::read_line_from_stdin().await.unwrap();
+    let ss_secret_id = streambed::read_line(std::io::stdin()).unwrap();
     assert!(
         !ss_secret_id.is_empty(),
         "Cannot source a secret id from stdin"
@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let ss_server_cert = if let Some(path) = args.ss_args.ss_server_cert_path {
         Some(
-            streambed::pem_from_file(&path)
+            streambed::read_pem(std::fs::File::open(&path)?)
                 .await
                 .unwrap_or_else(|_| panic!("Cannot find ss_server_cert_path at {path:?}")),
         )
