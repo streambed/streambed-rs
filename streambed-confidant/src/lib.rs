@@ -123,7 +123,9 @@ impl FileSecretStore {
                     match fs::File::open(task_root_path.join(secret_path)).await {
                         Ok(mut file) => {
                             let mut buf = Vec::new();
-                            if file.read_to_end(&mut buf).await.is_ok() {
+                            if file.read_to_end(&mut buf).await.is_ok()
+                                && buf.len() >= crypto::SALT_SIZE
+                            {
                                 let (salt, bytes) = buf.split_at_mut(crypto::SALT_SIZE);
                                 if let Ok(salt) = salt.try_into() {
                                     crypto::decrypt(bytes, &root_secret, &salt);
@@ -240,7 +242,7 @@ impl SecretStore for FileSecretStore {
                         buf.extend(salt);
                         buf.extend(bytes);
 
-                        if file.write_all(&buf).await.is_ok() {
+                        if file.write_all(&buf).await.is_ok() && file.sync_all().await.is_ok() {
                             result = Ok(());
                             // We should be able to read our writes
                             let _ = self.cache.remove(secret_path.to_string()).await;
