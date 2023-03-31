@@ -156,6 +156,17 @@ impl TopicFileOp {
             .map_err(TopicFileOpError::IoError)
     }
 
+    pub fn recover_history_files(&self) -> Result<(), TopicFileOpError> {
+        let present_path = self.root_path.join(self.topic.clone());
+        let work_path = present_path.with_extension(WORK_FILE_EXTENSION);
+        let ancient_history_path = present_path.with_extension(ANCIENT_HISTORY_FILE_EXTENSION);
+        let history_path = present_path.with_extension(HISTORY_FILE_EXTENSION);
+
+        let _ = fs::rename(ancient_history_path, history_path);
+        let _ = fs::remove_file(work_path);
+        Ok(())
+    }
+
     pub fn replace_history_files(&self) -> Result<(), TopicFileOpError> {
         let present_path = self.root_path.join(self.topic.clone());
         let work_path = present_path.with_extension(WORK_FILE_EXTENSION);

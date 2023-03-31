@@ -239,16 +239,20 @@ where
     E: Error,
     W: Write,
 {
-    pub fn new<AA, NTF, RHFWWF>(
+    pub fn new<AA, NWF, RCHF, RPHF>(
         age_active: AA,
-        new_work_file: NTF,
-        replace_history_files: RHFWWF,
+        new_work_file: NWF,
+        mut recover_history_files: RCHF,
+        replace_history_files: RPHF,
     ) -> Self
     where
         AA: FnMut() -> Result<Option<Offset>, E> + Send + 'static,
-        NTF: FnMut() -> Result<W, E> + Send + 'static,
-        RHFWWF: FnMut() -> Result<(), E> + Send + 'static,
+        NWF: FnMut() -> Result<W, E> + Send + 'static,
+        RCHF: FnMut() -> Result<(), E> + Send + 'static,
+        RPHF: FnMut() -> Result<(), E> + Send + 'static,
     {
+        let _ = recover_history_files();
+
         Self {
             age_active: Box::new(age_active),
             new_work_writer: Box::new(new_work_file),
@@ -1014,6 +1018,8 @@ mod tests {
         let tso_num_ages = num_ages.clone();
         let num_new_work_writers = Arc::new(AtomicU32::new(0));
         let tso_num_new_work_writers = num_new_work_writers.clone();
+        let num_recover_histories = Arc::new(AtomicU32::new(0));
+        let tso_num_recover_histories = num_recover_histories.clone();
         let num_rename_histories = Arc::new(AtomicU32::new(0));
         let tso_num_rename_histories = num_rename_histories.clone();
         let work_file = compaction_dir.join("work_file");
@@ -1029,6 +1035,12 @@ mod tests {
                     .clone()
                     .fetch_add(1, Ordering::Relaxed);
                 File::create(tso_work_file.clone())
+            },
+            move || {
+                tso_num_recover_histories
+                    .clone()
+                    .fetch_add(1, Ordering::Relaxed);
+                Ok(())
             },
             move || {
                 tso_num_rename_histories
@@ -1051,6 +1063,7 @@ mod tests {
 
         assert_eq!(num_ages.load(Ordering::Relaxed), 2);
         assert_eq!(num_new_work_writers.load(Ordering::Relaxed), 2);
+        assert_eq!(num_recover_histories.load(Ordering::Relaxed), 1);
         assert_eq!(num_rename_histories.load(Ordering::Relaxed), 2);
 
         let mut f = File::open(work_file).unwrap();
