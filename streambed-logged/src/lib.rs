@@ -170,6 +170,7 @@ impl FileLog {
         let mut age_active_file_topic_file_op = topic_file_op.clone();
         let age_active_file_read_buffer_size = self.read_buffer_size;
         let new_work_file_topic_file_op = topic_file_op.clone();
+        let recover_history_files_topic_file_op = topic_file_op.clone();
         let replace_history_files_topic_file_op = topic_file_op;
 
         let compaction_write_buffer_size = self.compaction_write_buffer_size;
@@ -190,6 +191,7 @@ impl FileLog {
                     .map_err(TopicFileOpError::IoError)
                 },
                 move || new_work_file_topic_file_op.new_work_file(compaction_write_buffer_size),
+                move || recover_history_files_topic_file_op.recover_history_files(),
                 move || replace_history_files_topic_file_op.replace_history_files(),
             ),
         );

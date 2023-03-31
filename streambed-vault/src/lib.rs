@@ -323,26 +323,23 @@ impl SecretStore for VaultSecretStore {
                 if response.status() == StatusCode::FORBIDDEN {
                     increment_counter!("ss_unauthorized", USERPASS_AUTH_LABEL => username.clone());
                     Err(Error::Unauthorized)
+                } else if response.status().is_success() {
+                    let userpass_auth_reply = response
+                        .json::<UserPassAuthReply>()
+                        .await
+                        .map_err(|_| Error::Unauthorized);
+                    if let Ok(r) = &userpass_auth_reply {
+                        let mut client_token = task_client_token.lock().await;
+                        *client_token = Some(r.auth.client_token.clone());
+                    }
+                    userpass_auth_reply
                 } else {
-                    let secret_reply = if response.status().is_success() {
-                        let userpass_auth_reply = response
-                            .json::<UserPassAuthReply>()
-                            .await
-                            .map_err(|_| Error::Unauthorized);
-                        if let Ok(r) = &userpass_auth_reply {
-                            let mut client_token = task_client_token.lock().await;
-                            *client_token = Some(r.auth.client_token.clone());
-                        }
-                        userpass_auth_reply
-                    } else {
-                        debug!(
-                            "Secret store failure status while authenticating: {:?}",
-                            response.status()
-                        );
-                        increment_counter!("ss_other_reply_failures", USERPASS_AUTH_LABEL => username.clone());
-                        Err(Error::Unauthorized)
-                    };
-                    secret_reply
+                    debug!(
+                        "Secret store failure status while authenticating: {:?}",
+                        response.status()
+                    );
+                    increment_counter!("ss_other_reply_failures", USERPASS_AUTH_LABEL => username.clone());
+                    Err(Error::Unauthorized)
                 }
             }
             Err(e) => {
