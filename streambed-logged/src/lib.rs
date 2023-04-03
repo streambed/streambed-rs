@@ -10,7 +10,7 @@ use bytes::BufMut;
 use bytes::{Buf, BytesMut};
 use chrono::{DateTime, Utc};
 use compaction::{CompactionStrategy, Compactor, ScopedTopicSubscriber, TopicStorageOps};
-use log::{trace, warn};
+use log::{error, trace, warn};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, TimestampSecondsWithFrac};
 use std::fs::{self, File, OpenOptions};
@@ -63,14 +63,15 @@ type ShareableTopicMap<T> = Arc<Mutex<HashMap<Topic, T>>>;
 ///    can read a topic though.
 #[derive(Clone)]
 pub struct FileLog {
-    root_path: PathBuf,
-    compaction_threshold_size: u64,
-    read_buffer_size: usize,
-    compaction_write_buffer_size: usize,
-    write_buffer_size: usize,
     compactor_txs: ShareableTopicMap<mpsc::Sender<u64>>,
+    compaction_threshold_size: u64,
+    compaction_write_buffer_size: usize,
+    max_record_size: usize,
+    read_buffer_size: usize,
     producer_txs: ShareableTopicMap<mpsc::Sender<ProduceRequest>>,
     pub(crate) topic_file_ops: ShareableTopicMap<TopicFileOp>,
+    root_path: PathBuf,
+    write_buffer_size: usize,
 }
 
 #[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
@@ -102,7 +103,7 @@ impl FileLog {
     where
         P: Into<PathBuf>,
     {
-        Self::with_config(root_path, 64 * 1024, 8192, 64 * 1024, 8192)
+        Self::with_config(root_path, 64 * 1024, 8192, 64 * 1024, 8192, 8192)
     }
 
     /// Construct a new file log that will also spawn a task for each
@@ -120,19 +121,21 @@ impl FileLog {
         read_buffer_size: usize,
         compaction_write_buffer_size: usize,
         write_buffer_size: usize,
+        max_record_size: usize,
     ) -> Self
     where
         P: Into<PathBuf>,
     {
         Self {
-            root_path: root_path.into(),
-            compaction_threshold_size,
-            read_buffer_size,
-            compaction_write_buffer_size,
-            write_buffer_size,
             compactor_txs: Arc::new(Mutex::new(HashMap::new())),
+            compaction_threshold_size,
+            compaction_write_buffer_size,
+            max_record_size,
+            read_buffer_size,
+            root_path: root_path.into(),
             producer_txs: Arc::new(Mutex::new(HashMap::new())),
             topic_file_ops: Arc::new(Mutex::new(HashMap::new())),
+            write_buffer_size,
         }
     }
 
@@ -169,6 +172,7 @@ impl FileLog {
 
         let mut age_active_file_topic_file_op = topic_file_op.clone();
         let age_active_file_read_buffer_size = self.read_buffer_size;
+        let age_active_file_max_record_size = self.max_record_size;
         let new_work_file_topic_file_op = topic_file_op.clone();
         let recover_history_files_topic_file_op = topic_file_op.clone();
         let replace_history_files_topic_file_op = topic_file_op;
@@ -185,6 +189,7 @@ impl FileLog {
                     find_offset(
                         &age_active_file_topic_file_op,
                         age_active_file_read_buffer_size,
+                        age_active_file_max_record_size,
                         true,
                     )
                     .map(|o| o.map(|o| o.end_offset))
@@ -234,9 +239,14 @@ impl CommitLog for FileLog {
             acquire_topic_file_ops(&self.root_path, &topic, &mut locked_topic_file_ops);
         drop(locked_topic_file_ops);
 
-        find_offset(&topic_file_op, self.read_buffer_size, false)
-            .ok()
-            .flatten()
+        find_offset(
+            &topic_file_op,
+            self.read_buffer_size,
+            self.max_record_size,
+            false,
+        )
+        .ok()
+        .flatten()
     }
 
     async fn produce(&self, record: ProducerRecord) -> ProduceReply {
@@ -262,10 +272,34 @@ impl CommitLog for FileLog {
                 );
                 drop(locked_topic_file_ops);
 
-                let mut next_offset = find_offset(&topic_file_op, self.read_buffer_size, false)
-                    .ok()
-                    .flatten()
-                    .map_or(0, |offsets| offsets.end_offset.wrapping_add(1));
+                let found_offsets = match find_offset(
+                    &topic_file_op,
+                    self.read_buffer_size,
+                    self.max_record_size,
+                    false,
+                ) {
+                    r @ Ok(_) => r,
+                    Err(e) => {
+                        error!("Error {e} when producing. Attempting to recover by truncating the active file.");
+
+                        if let Err(e) = recover_active_file(
+                            &mut topic_file_op,
+                            self.read_buffer_size,
+                            self.max_record_size,
+                        ) {
+                            error!("Error {e} when recoverying. Unable to recover the active file.")
+                        }
+
+                        find_offset(
+                            &topic_file_op,
+                            self.read_buffer_size,
+                            self.max_record_size,
+                            false,
+                        )
+                    }
+                };
+                let mut next_offset = found_offsets
+                    .map(|offsets| offsets.map_or(0, |offsets| offsets.end_offset.wrapping_add(1)));
 
                 let task_root_path = self.root_path.clone();
                 let task_compactor_txs = self.compactor_txs.clone();
@@ -283,94 +317,100 @@ impl CommitLog for FileLog {
                     async move {
                         let mut recv = producer_rx.recv().await;
                         while let Some((record, reply_to)) = recv {
-                            let topic_file_op = {
-                                if let Ok(mut locked_topic_file_ops) = task_topic_file_ops.lock() {
-                                    Some(acquire_topic_file_ops(
-                                        &task_root_path,
-                                        &record.topic,
-                                        &mut locked_topic_file_ops,
-                                    ))
-                                } else {
-                                    None
-                                }
-                            };
-                            if let Some(mut topic_file_op) = topic_file_op {
-                                let r = topic_file_op.with_active_file(
-                                    &open_options,
-                                    task_write_buffer_size,
-                                    |file| {
-                                        let storable_record = StorableRecord {
-                                            version: 0,
-                                            headers: record
-                                                .headers
-                                                .into_iter()
-                                                .map(|h| StorableHeader {
-                                                    key: h.key,
-                                                    value: h.value,
-                                                })
-                                                .collect(),
-                                            timestamp: record.timestamp,
-                                            key: record.key,
-                                            value: record.value,
-                                            offset: next_offset,
-                                        };
-
-                                        trace!("Producing record: {:?}", storable_record);
-
-                                        if let Ok(buf) = postcard::to_stdvec(&storable_record) {
-                                            file.write_all(&buf)
-                                                .map_err(TopicFileOpError::IoError)
-                                                .map(|_| buf.len())
-                                        } else {
-                                            Err(TopicFileOpError::CannotSerialize)
-                                        }
-                                    },
-                                );
-
-                                if let Ok((bytes_written, is_new_active_file)) = r {
-                                    let _ = reply_to.send(Ok(ProducedOffset {
-                                        offset: next_offset,
-                                    }));
-
-                                    next_offset = next_offset.wrapping_add(1);
-
-                                    if is_new_active_file {
-                                        file_size = 0;
-                                    }
-                                    file_size = file_size.wrapping_add(bytes_written as u64);
-
-                                    let compactor_tx = {
-                                        if let Ok(locked_task_compactor_txs) =
-                                            task_compactor_txs.lock()
-                                        {
-                                            locked_task_compactor_txs.get(&record.topic).cloned()
-                                        } else {
-                                            None
-                                        }
-                                    };
-                                    if let Some(compactor_tx) = compactor_tx {
-                                        let _ = compactor_tx.send(file_size).await;
-                                    }
-
-                                    match time::timeout(
-                                        TOPIC_FILE_PRODUCER_FLUSH,
-                                        producer_rx.recv(),
-                                    )
-                                    .await
+                            if let Ok(next_offset) = &mut next_offset {
+                                let topic_file_op = {
+                                    if let Ok(mut locked_topic_file_ops) =
+                                        task_topic_file_ops.lock()
                                     {
-                                        Ok(r) => recv = r,
-                                        Err(_) => {
-                                            let _ = topic_file_op.flush_active_file();
-                                            recv = producer_rx.recv().await;
-                                        }
+                                        Some(acquire_topic_file_ops(
+                                            &task_root_path,
+                                            &record.topic,
+                                            &mut locked_topic_file_ops,
+                                        ))
+                                    } else {
+                                        None
                                     }
+                                };
+                                if let Some(mut topic_file_op) = topic_file_op {
+                                    let r = topic_file_op.with_active_file(
+                                        &open_options,
+                                        task_write_buffer_size,
+                                        |file| {
+                                            let storable_record = StorableRecord {
+                                                version: 0,
+                                                headers: record
+                                                    .headers
+                                                    .into_iter()
+                                                    .map(|h| StorableHeader {
+                                                        key: h.key,
+                                                        value: h.value,
+                                                    })
+                                                    .collect(),
+                                                timestamp: record.timestamp,
+                                                key: record.key,
+                                                value: record.value,
+                                                offset: *next_offset,
+                                            };
 
-                                    continue;
+                                            trace!("Producing record: {:?}", storable_record);
+
+                                            if let Ok(buf) = postcard::to_stdvec(&storable_record) {
+                                                file.write_all(&buf)
+                                                    .map_err(TopicFileOpError::IoError)
+                                                    .map(|_| buf.len())
+                                            } else {
+                                                Err(TopicFileOpError::CannotSerialize)
+                                            }
+                                        },
+                                    );
+
+                                    if let Ok((bytes_written, is_new_active_file)) = r {
+                                        let _ = reply_to.send(Ok(ProducedOffset {
+                                            offset: *next_offset,
+                                        }));
+
+                                        *next_offset = next_offset.wrapping_add(1);
+
+                                        if is_new_active_file {
+                                            file_size = 0;
+                                        }
+                                        file_size = file_size.wrapping_add(bytes_written as u64);
+
+                                        let compactor_tx = {
+                                            if let Ok(locked_task_compactor_txs) =
+                                                task_compactor_txs.lock()
+                                            {
+                                                locked_task_compactor_txs
+                                                    .get(&record.topic)
+                                                    .cloned()
+                                            } else {
+                                                None
+                                            }
+                                        };
+                                        if let Some(compactor_tx) = compactor_tx {
+                                            let _ = compactor_tx.send(file_size).await;
+                                        }
+
+                                        match time::timeout(
+                                            TOPIC_FILE_PRODUCER_FLUSH,
+                                            producer_rx.recv(),
+                                        )
+                                        .await
+                                        {
+                                            Ok(r) => recv = r,
+                                            Err(_) => {
+                                                let _ = topic_file_op.flush_active_file();
+                                                recv = producer_rx.recv().await;
+                                            }
+                                        }
+
+                                        continue;
+                                    }
                                 }
                             }
 
                             let _ = reply_to.send(Err(ProducerError::CannotProduce));
-                            break;
+                            recv = producer_rx.recv().await;
                         }
                     }
                 });
@@ -417,11 +457,12 @@ impl CommitLog for FileLog {
             let mut task_offset = offsets.get(&s.topic).copied();
             let task_tx = tx.clone();
             let task_read_buffer_size = self.read_buffer_size;
+            let task_max_record_size = self.max_record_size;
             let task_topic_file_ops = self.topic_file_ops.clone();
             let task_open_options = open_options.clone();
             tokio::spawn(async move {
                 let mut buf = BytesMut::with_capacity(task_read_buffer_size);
-                let mut decoder = StorableRecordDecoder;
+                let mut decoder = StorableRecordDecoder::new(task_max_record_size);
                 'outer: loop {
                     buf.clear();
 
@@ -497,8 +538,12 @@ impl CommitLog for FileLog {
                                 },
                                 Ok(None) => (),
                                 Err(e) => {
-                                    warn!("Error consuming topic file: {e} - aborting subscription for {task_topic}");
-                                    break 'outer;
+                                    if task_tx.is_closed() {
+                                        break 'outer;
+                                    }
+                                    trace!("Topic is corrupt for {topic_file:?}. Error {e} occurred when subscribed. Retrying.");
+                                    time::sleep(TOPIC_FILE_CONSUMER_POLL).await;
+                                    continue 'outer;
                                 }
                             }
                         },
@@ -555,6 +600,7 @@ fn acquire_topic_file_ops(
 fn find_offset(
     topic_file_op: &TopicFileOp,
     read_buffer_size: usize,
+    max_record_size: usize,
     exclude_active_file: bool,
 ) -> io::Result<Option<PartitionOffsets>> {
     let mut open_options = OpenOptions::new();
@@ -565,7 +611,7 @@ fn find_offset(
     match topic_files.next() {
         Some(Ok(mut topic_file)) => {
             let mut buf = BytesMut::with_capacity(read_buffer_size);
-            let mut decoder = StorableRecordDecoder;
+            let mut decoder = StorableRecordDecoder::new(max_record_size);
             let mut beginning_offset = None;
             let mut end_offset = None;
             loop {
@@ -605,6 +651,49 @@ fn find_offset(
     }
 }
 
+fn recover_active_file(
+    topic_file_op: &mut TopicFileOp,
+    read_buffer_size: usize,
+    max_record_size: usize,
+) -> Result<(), TopicFileOpError> {
+    let mut open_options = OpenOptions::new();
+    open_options.read(true).write(true);
+    let mut topic_file = topic_file_op.open_active_file(open_options)?;
+    let mut buf = BytesMut::with_capacity(read_buffer_size);
+    let mut decoder = StorableRecordDecoder::new(max_record_size);
+    let mut bytes_read = None;
+    loop {
+        let Ok(len) = read_buf(&mut topic_file, &mut buf) else {
+                break;
+            };
+
+        let before_decode_len = buf.len();
+
+        let decode_fn = if len == 0 {
+            StorableRecordDecoder::decode_eof
+        } else {
+            StorableRecordDecoder::decode
+        };
+        match decode_fn(&mut decoder, &mut buf) {
+            Ok(None) if len == 0 => break,
+            Ok(_) => (),
+            Err(_) => {
+                if let Some(bytes_read) = bytes_read {
+                    topic_file
+                        .set_len(bytes_read)
+                        .map_err(TopicFileOpError::IoError)?;
+                }
+                break;
+            }
+        }
+
+        let consumed_bytes = (before_decode_len - buf.len()) as u64;
+        bytes_read =
+            bytes_read.map_or_else(|| Some(consumed_bytes), |br| br.checked_add(consumed_bytes));
+    }
+    Ok(())
+}
+
 // Similar to Tokio's AsyncReadExt [`read_buf`](https://docs.rs/tokio/latest/tokio/io/trait.AsyncReadExt.html#method.read_buf).
 // Thanks to Alice Ryhl: https://discord.com/channels/500028886025895936/627696030334582784/1071037851980021761
 fn read_buf<B>(file: &mut File, buf: &mut B) -> io::Result<usize>
@@ -624,7 +713,15 @@ where
     result
 }
 
-struct StorableRecordDecoder;
+struct StorableRecordDecoder {
+    max_record_size: usize,
+}
+
+impl StorableRecordDecoder {
+    pub fn new(max_record_size: usize) -> Self {
+        Self { max_record_size }
+    }
+}
 
 impl Decoder for StorableRecordDecoder {
     type Item = StorableRecord;
@@ -638,7 +735,12 @@ impl Decoder for StorableRecordDecoder {
                 src.advance(src.len() - remaining.len());
                 Ok(Some(record))
             }
-            Err(e) if e == postcard::Error::DeserializeUnexpectedEnd => Ok(None),
+            Err(e)
+                if e == postcard::Error::DeserializeUnexpectedEnd
+                    && src.len() <= self.max_record_size =>
+            {
+                Ok(None)
+            }
             Err(e) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
         }
     }
@@ -944,5 +1046,114 @@ mod tests {
         );
         assert!(records.next().await.is_some());
         assert!(records.next().await.is_none());
+    }
+
+    #[test(tokio::test)]
+    async fn test_recovery() {
+        let logged_dir = env::temp_dir().join("test_recovery");
+        let _ = fs::remove_dir_all(&logged_dir).await;
+        let _ = fs::create_dir_all(&logged_dir).await;
+        println!("Writing to {logged_dir:?}");
+
+        let cl = FileLog::new(logged_dir.clone());
+
+        let topic = "my-topic";
+
+        cl.produce(ProducerRecord {
+            topic: topic.to_string(),
+            headers: vec![],
+            timestamp: None,
+            key: 0,
+            value: b"some-value-0".to_vec(),
+            partition: 0,
+        })
+        .await
+        .unwrap();
+        cl.produce(ProducerRecord {
+            topic: topic.to_string(),
+            headers: vec![],
+            timestamp: None,
+            key: 0,
+            value: b"some-value-1".to_vec(),
+            partition: 0,
+        })
+        .await
+        .unwrap();
+        cl.produce(ProducerRecord {
+            topic: topic.to_string(),
+            headers: vec![],
+            timestamp: None,
+            key: 0,
+            value: b"some-value-2".to_vec(),
+            partition: 0,
+        })
+        .await
+        .unwrap();
+
+        // Ensure everything gets flushed out and left in a good state.
+        drop(cl);
+
+        // Now corrupt the log by knocking a few bytes off the end
+
+        let topic_file_path = logged_dir.join(topic);
+        let topic_file = fs::OpenOptions::new()
+            .write(true)
+            .open(topic_file_path)
+            .await
+            .unwrap();
+
+        let len = topic_file.metadata().await.unwrap().len();
+        topic_file.set_len(len - 2).await.unwrap();
+
+        // Start producing to a new log - simulates a restart.
+
+        let cl = FileLog::new(logged_dir.clone());
+
+        cl.produce(ProducerRecord {
+            topic: topic.to_string(),
+            headers: vec![],
+            timestamp: None,
+            key: 0,
+            value: b"some-value-3".to_vec(),
+            partition: 0,
+        })
+        .await
+        .unwrap();
+
+        let offsets = vec![ConsumerOffset {
+            topic: topic.to_string(),
+            partition: 0,
+            offset: 0,
+        }];
+        let subscriptions = vec![Subscription {
+            topic: topic.to_string(),
+        }];
+        let mut records = cl.scoped_subscribe("some-consumer", offsets, subscriptions, None);
+
+        assert_eq!(
+            records.next().await,
+            Some(ConsumerRecord {
+                topic: topic.to_string(),
+                headers: vec![],
+                timestamp: None,
+                key: 0,
+                value: b"some-value-1".to_vec(),
+                partition: 0,
+                offset: 1
+            })
+        );
+
+        assert_eq!(
+            records.next().await,
+            Some(ConsumerRecord {
+                topic: topic.to_string(),
+                headers: vec![],
+                timestamp: None,
+                key: 0,
+                value: b"some-value-3".to_vec(),
+                partition: 0,
+                offset: 2
+            })
+        );
     }
 }

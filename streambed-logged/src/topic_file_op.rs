@@ -113,6 +113,14 @@ impl TopicFileOp {
         r.map(|_| ()).map_err(TopicFileOpError::IoError)
     }
 
+    pub fn open_active_file(&self, open_options: OpenOptions) -> Result<File, TopicFileOpError> {
+        let Ok(locked_write_handle) = self.write_handle.lock() else {return Err(TopicFileOpError::CannotLock)};
+        let present_path = self.root_path.join(self.topic.clone());
+        let r = open_options.open(present_path);
+        drop(locked_write_handle);
+        r.map_err(TopicFileOpError::IoError)
+    }
+
     pub fn open_files(
         &self,
         open_options: OpenOptions,
