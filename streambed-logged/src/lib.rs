@@ -493,35 +493,39 @@ impl CommitLog for FileLog {
                             } else {
                                 StorableRecordDecoder::decode
                             };
-                            match decode_fn(&mut decoder, &mut buf) {
-                                Ok(Some(record)) => {
-                                    if task_offset.is_none() || Some(record.offset) > task_offset {
-                                        let consumer_record = ConsumerRecord {
-                                            topic: task_topic.clone(),
-                                            headers: record
-                                                .headers
-                                                .into_iter()
-                                                .map(|h| Header {
-                                                    key: h.key,
-                                                    value: h.value,
-                                                })
-                                                .collect(),
-                                            timestamp: record.timestamp,
-                                            key: record.key,
-                                            value: record.value,
-                                            partition: 0,
-                                            offset: record.offset,
-                                        };
+                            let mut r = decode_fn(&mut decoder, &mut buf);
+                            while let Ok(Some(record)) = r {
+                                if task_offset.is_none() || Some(record.offset) > task_offset {
+                                    let consumer_record = ConsumerRecord {
+                                        topic: task_topic.clone(),
+                                        headers: record
+                                            .headers
+                                            .into_iter()
+                                            .map(|h| Header {
+                                                key: h.key,
+                                                value: h.value,
+                                            })
+                                            .collect(),
+                                        timestamp: record.timestamp,
+                                        key: record.key,
+                                        value: record.value,
+                                        partition: 0,
+                                        offset: record.offset,
+                                    };
 
-                                        trace!("Consumed record: {:?}", consumer_record);
+                                    trace!("Consumed record: {:?}", consumer_record);
 
-                                        if task_tx.send(consumer_record).await.is_err() {
-                                            break 'outer;
-                                        }
-
-                                        task_offset = Some(record.offset)
+                                    if task_tx.send(consumer_record).await.is_err() {
+                                        break 'outer;
                                     }
+
+                                    task_offset = Some(record.offset)
                                 }
+
+                                r = decode_fn(&mut decoder, &mut buf);
+                            }
+                            match r {
+                                Ok(Some(_)) => (), // Should never happen
                                 Ok(None) if len == 0 => match topic_files.next() {
                                     Some(Ok(tf)) => topic_file = tf,
                                     Some(Err(e)) => {
@@ -624,20 +628,20 @@ fn find_offset(
                 } else {
                     StorableRecordDecoder::decode
                 };
-                match decode_fn(&mut decoder, &mut buf)? {
-                    Some(record) if beginning_offset.is_none() => {
+                while let Some(record) = decode_fn(&mut decoder, &mut buf)? {
+                    if beginning_offset.is_none() {
                         beginning_offset = Some(record.offset);
                         end_offset = Some(record.offset);
-                    }
-                    Some(record) => {
+                    } else {
                         end_offset = Some(record.offset);
                     }
-                    None if len == 0 => match topic_files.next() {
+                }
+                if len == 0 {
+                    match topic_files.next() {
                         Some(Ok(tf)) => topic_file = tf,
                         Some(Err(e)) => return Err(e),
                         None => break,
-                    },
-                    None => (),
+                    }
                 }
             }
             Ok(Some(PartitionOffsets {
@@ -674,7 +678,11 @@ fn recover_active_file(
         } else {
             StorableRecordDecoder::decode
         };
-        match decode_fn(&mut decoder, &mut buf) {
+        let mut r = decode_fn(&mut decoder, &mut buf);
+        while let Ok(Some(_)) = r {
+            r = decode_fn(&mut decoder, &mut buf);
+        }
+        match r {
             Ok(None) if len == 0 => break,
             Ok(_) => (),
             Err(_) => {
