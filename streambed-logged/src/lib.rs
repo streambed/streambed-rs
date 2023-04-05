@@ -1156,4 +1156,102 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn test_buf_mut() {
+        let mut b = BytesMut::with_capacity(8192);
+        for _ in 0..10 {
+            let n0 = b.capacity();
+            let c = b.chunk_mut();
+            let l = c.len();
+            let n1 = b.capacity();
+            unsafe { b.advance_mut(l) };
+            let n2 = b.capacity();
+            b.advance(l);
+            let n3 = b.capacity();
+            println!("Chunk: {l} Capacity trace: {n0} {n1} {n2} {n3}");
+        }
+    }
+
+    #[test]
+    fn test_buf_mut_partial_decode() {
+        // simulate message sequence
+        let mut messages = [7000_usize, 6000, 8000, 5000, 100, 4000]
+            .into_iter()
+            .cycle()
+            .peekable();
+
+        let init_capacity = 8192;
+        let max_read_len = 8192 * 2;
+
+        // the buffer: will it grow?
+        let mut b = BytesMut::with_capacity(init_capacity);
+
+        for _ in 0..200 {
+            // simulate read_buf()
+            {
+                let n0 = b.capacity();
+                let c = b.chunk_mut();
+                let s = c.len();
+                let r = s.min(max_read_len);
+                let n1 = b.capacity();
+                unsafe { b.advance_mut(r) };
+                println!("readbuf(): Chunk size: {s} Read len: {r} Capacity: {n0} -> {n1}");
+            }
+
+            // simulate decode
+            {
+                let m = *messages.peek().unwrap();
+                let l = b.len();
+                if m <= l {
+                    b.advance(m);
+                    messages.next();
+                }
+                let n2 = b.capacity();
+                println!("decode(): Message len: {m} Buffer len: {l} Capacity: {n2}");
+            }
+        }
+    }
+
+    #[test]
+    fn test_buf_mut_partial_decode_fix() {
+        // simulate message sequence
+        let mut messages = [7000_usize, 6000, 8000, 5000, 100, 4000]
+            .into_iter()
+            .cycle()
+            .peekable();
+
+        let init_capacity = 8192;
+        let max_read_len = 8192 * 2;
+
+        // the buffer: will it grow?
+        let mut b = BytesMut::with_capacity(init_capacity);
+
+        for _ in 0..200 {
+            // simulate read_buf()
+            {
+                let n0 = b.capacity();
+                let c = b.chunk_mut();
+                let s = c.len();
+                let r = s.min(max_read_len);
+                let n1 = b.capacity();
+                unsafe { b.advance_mut(r) };
+                println!("readbuf(): Chunk size: {s} Read len: {r} Capacity: {n0} -> {n1}");
+            }
+
+            // simulate decode
+            loop {
+                let m = *messages.peek().unwrap();
+                let l = b.len();
+                if m <= l {
+                    b.advance(m);
+                    messages.next();
+                } else {
+                    break;
+                }
+                let n2 = b.capacity();
+                println!("decode(): Message len: {m} Buffer len: {l} Capacity: {n2}");
+            }
+        }
+    }
 }
