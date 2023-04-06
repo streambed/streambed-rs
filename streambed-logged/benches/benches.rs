@@ -1,3 +1,5 @@
+use std::thread;
+use std::time::Duration;
 use std::{env, fs};
 
 use criterion::{criterion_group, criterion_main, Criterion};
@@ -82,6 +84,9 @@ fn criterion_benchmark(c: &mut Criterion) {
                 .unwrap();
             }
         });
+
+        // Provide time for the writes to be flushed
+        thread::sleep(Duration::from_secs(1));
 
         b.to_async(&rt).iter(|| {
             let task_cl = cl.clone();
