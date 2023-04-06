@@ -504,7 +504,7 @@ where
                                         offset: record.offset,
                                     };
 
-                                    let Ok(buf) = postcard::to_stdvec(&storable_record) else {return Err(CompactionError::CannotSerialize)};
+                                    let Ok(buf) = postcard::to_stdvec_crc32(&storable_record, CRC.digest()) else {return Err(CompactionError::CannotSerialize)};
                                     writer.write_all(&buf).map_err(CompactionError::IoError)?;
                                 }
                             }
@@ -1071,6 +1071,9 @@ mod tests {
         let _ = f.read_to_end(&mut buf).unwrap();
 
         // Two records should have been written back out.
-        assert_eq!(buf, [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1]);
+        assert_eq!(
+            buf,
+            [0, 0, 0, 0, 0, 0, 138, 124, 42, 87, 0, 0, 0, 1, 0, 1, 247, 109, 0, 0]
+        );
     }
 }

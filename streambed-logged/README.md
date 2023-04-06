@@ -112,6 +112,12 @@ topics, partitions, keys, records, offsets, timestamps and headers.
 Services using logged may therefore lend themselves to portability 
 toward Kafka and others.
 
+### Data integrity
+
+A CRC32C checksum is used to ensure data integrity against the harsh reality
+of a host being powered off abruptly. Any errors detected, including
+incomplete writes or compactions, will be automatically recovered.
+
 ## How is logged implemented?
 
 Logged is implemented as a library avoiding the need for a broker process. This
