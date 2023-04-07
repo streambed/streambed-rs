@@ -9,9 +9,10 @@ async-trait = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
+crc = { workspace = true }
 humantime = { workspace = true }
 log = { workspace = true }
-postcard = { workspace = true, default-features = false, features = ["use-std"] }
+postcard = { workspace = true, default-features = false, features = ["use-std", "use-crc"] }
 serde = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["chrono_0_4"] }
 tokio = { workspace = true, features = ["full"] }
