@@ -42,7 +42,7 @@ use crate::topic_file_op::TopicFileOpError;
 const COMPACTOR_QUEUE_SIZE: usize = 10;
 const COMPACTOR_WRITE_POLL: Duration = Duration::from_millis(10);
 const CONSUMER_QUEUE_SIZE: usize = 10;
-const CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
+static CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
 const PRODUCER_QUEUE_SIZE: usize = 10;
 const TOPIC_FILE_CONSUMER_POLL: Duration = Duration::from_secs(1);
@@ -468,7 +468,7 @@ impl CommitLog for FileLog {
             let task_open_options = open_options.clone();
             tokio::spawn(async move {
                 let mut buf = BytesMut::with_capacity(task_read_buffer_size);
-                let mut decoder = StorableRecordDecoder::new(CRC, task_max_record_size);
+                let mut decoder = StorableRecordDecoder::new(task_max_record_size);
                 'outer: loop {
                     buf.clear();
 
@@ -621,7 +621,7 @@ fn find_offset(
     match topic_files.next() {
         Some(Ok(mut topic_file)) => {
             let mut buf = BytesMut::with_capacity(read_buffer_size);
-            let mut decoder = StorableRecordDecoder::new(CRC, max_record_size);
+            let mut decoder = StorableRecordDecoder::new(max_record_size);
             let mut beginning_offset = None;
             let mut end_offset = None;
             loop {
@@ -670,7 +670,7 @@ fn recover_active_file(
     open_options.read(true).write(true);
     let mut topic_file = topic_file_op.open_active_file(open_options)?;
     let mut buf = BytesMut::with_capacity(read_buffer_size);
-    let mut decoder = StorableRecordDecoder::new(CRC, max_record_size);
+    let mut decoder = StorableRecordDecoder::new(max_record_size);
     let mut bytes_read = None;
     loop {
         let Ok(len) = read_buf(&mut topic_file, &mut buf) else {
@@ -728,16 +728,12 @@ where
 }
 
 struct StorableRecordDecoder {
-    crc: Crc<u32>,
     max_record_size: usize,
 }
 
 impl StorableRecordDecoder {
-    pub fn new(crc: Crc<u32>, max_record_size: usize) -> Self {
-        Self {
-            crc,
-            max_record_size,
-        }
+    pub fn new(max_record_size: usize) -> Self {
+        Self { max_record_size }
     }
 }
 
@@ -747,7 +743,7 @@ impl Decoder for StorableRecordDecoder {
     type Error = std::io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let result = postcard::take_from_bytes_crc32::<StorableRecord>(src, self.crc.digest());
+        let result = postcard::take_from_bytes_crc32::<StorableRecord>(src, CRC.digest());
         match result {
             Ok((record, remaining)) => {
                 src.advance(src.len() - remaining.len());
