@@ -51,4 +51,4 @@ warp = "0.3"
 
 
 [patch.crates-io]
-postcard = { git = "https://github.com/huntc/postcard.git", rev = "97db5f8c57eed60c6019ea531d28b9a1dde12c9a" }
+postcard = { git = "https://github.com/jamesmunns/postcard.git", rev = "a0ef8a2f90f53f1c30a554624c187a9672d098c9" }

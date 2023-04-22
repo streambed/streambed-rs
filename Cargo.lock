@@ -1536,7 +1536,7 @@ checksum = "26f6a7b87c2e435a3241addceeeff740ff8b7e76b74c13bf9acb17fa454ea00b"
 [[package]]
 name = "postcard"
 version = "1.0.4"
-source = "git+https://github.com/huntc/postcard.git?rev=97db5f8c57eed60c6019ea531d28b9a1dde12c9a#97db5f8c57eed60c6019ea531d28b9a1dde12c9a"
+source = "git+https://github.com/jamesmunns/postcard.git?rev=a0ef8a2f90f53f1c30a554624c187a9672d098c9#a0ef8a2f90f53f1c30a554624c187a9672d098c9"
 dependencies = [
  "cobs",
  "crc",
