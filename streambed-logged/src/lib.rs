@@ -106,7 +106,7 @@ impl FileLog {
     where
         P: Into<PathBuf>,
     {
-        Self::with_config(root_path, 64 * 1024, 8192, 64 * 1024, 8192, 8192)
+        Self::with_config(root_path, 64 * 1024, 8192, 64 * 1024, 8 * 1024, 16 * 1024)
     }
 
     /// Construct a new file log that will also spawn a task for each
