@@ -1,0 +1,44 @@
+// Standard commands and events.
+// See https://christopherhunt-software.blogspot.com/2023/06/introducing-standard-streamed-commands.html
+
+syntax = "proto3";
+
+package streambed.stdce;
+
+import "commit_log.proto";
+
+// Commands that can be received on stdin
+message Command {
+    // Handle a consumer record that has been received
+    message HandleConsumer {
+        streambed.commit_log.ConsumerRecord record = 1;
+    }
+    
+    // This will always be the first command delivered
+    // and indicates the partition offsets for each
+    // topic that been subscribed for the purposes of
+    // feeding records on stdin. The partition offsets
+    // can be used to determine when an end of events
+    // has been reached for event initialially event-
+    // sourcing state.
+    message HandleSubscription {
+        map<string, streambed.commit_log.PartitionOffsets> subscriptons = 1;
+    }
+
+    oneof command {
+        HandleConsumer handle_consumer = 10;
+        HandleSubscription handle_subscription = 11;
+    }
+}
+
+// Events that can be sent to stdout
+message Event {
+    // Records can be produced to a topic
+    message RecordProduced {
+        streambed.commit_log.ProducerRecord record = 1;
+    }
+
+    oneof event {
+        RecordProduced record_produced = 10;
+    }
+}

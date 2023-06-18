@@ -1,0 +1,71 @@
+// Declares the types associated with a commit log,
+// heavily inspired by Apache Kafka.
+
+syntax = "proto3";
+
+package streambed.commit_log;
+
+import "google/protobuf/timestamp.proto";
+
+// A header provides a means of augmenting a record with
+// meta-data.
+message Header {
+    string key = 1;
+    bytes value = 2;
+}
+
+// A declaration of an offset to be committed to a topic.
+message ConsumerOffset {
+    string topic = 1;
+    uint32 partition = 2;
+    uint64 offset = 3;
+}
+
+// A declaration of a topic to subscribe to
+message Subscription {
+    string topic = 1;
+}
+
+// A declaration of a consumer group session to connect with.
+// In the case that offsets are supplied, these offsets are
+// associated with their respective topics such that any
+// subsequent subscription will source from the offset.
+// In the case where subscriptions are supplied, the consumer
+// instance will subscribe and reply with a stream of records
+// ending only when the connection to the topic is severed.
+message Consumer {
+    repeated ConsumerOffset offsets = 1;
+    repeated Subscription subscriptions = 2;
+}
+
+// A declaration of a record produced by a subscription
+message ConsumerRecord {
+    string topic = 1;
+    repeated Header headers = 2;
+    google.protobuf.Timestamp timestamp = 3;
+    string key= 4;
+    bytes value = 5;
+    uint32 partition = 6;
+    uint64 offset = 7;
+}
+
+// The reply to an offsets request
+message PartitionOffsets {
+    uint64 beginning_offset = 1;
+    uint64 end_offset = 2;
+}
+
+// A declaration of a record to be produced to a topic
+message ProducerRecord {
+    string topic = 1;
+    repeated Header headers = 2;
+    google.protobuf.Timestamp timestamp = 3;
+    string key = 4;
+    bytes value = 5;
+    uint32 partition = 6;
+}
+
+// The reply to a publish request
+message ProducedOffset {
+    uint64 offset = 1;
+}
