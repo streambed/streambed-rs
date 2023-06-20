@@ -10,7 +10,7 @@ import "google/protobuf/timestamp.proto";
 // A header provides a means of augmenting a record with
 // meta-data.
 message Header {
-    string key = 1;
+    uint64 key = 1;
     bytes value = 2;
 }
 
@@ -43,7 +43,7 @@ message ConsumerRecord {
     string topic = 1;
     repeated Header headers = 2;
     google.protobuf.Timestamp timestamp = 3;
-    string key= 4;
+    uint64 key= 4;
     bytes value = 5;
     uint32 partition = 6;
     uint64 offset = 7;
@@ -60,7 +60,7 @@ message ProducerRecord {
     string topic = 1;
     repeated Header headers = 2;
     google.protobuf.Timestamp timestamp = 3;
-    string key = 4;
+    uint64 key = 4;
     bytes value = 5;
     uint32 partition = 6;
 }
