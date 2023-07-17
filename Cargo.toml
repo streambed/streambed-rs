@@ -32,10 +32,10 @@ hex = "0.4.3"
 http = "0.2.8"
 hmac = "0.12.1"
 humantime = "2.1.0"
-hyper = "0.14.23"
+hyper = { version = "0.14.23", default-features = false }
 log = "0.4.17"
-metrics = "0.20.1"
-postcard = "1.0.2"
+metrics = { version = "0.20.1", default-features = false }
+postcard = { version = "1.0.2", default-features = false }
 rand = "0.8.5"
 reqwest = "0.11.13"
 scopeguard = "1.1"
