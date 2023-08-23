@@ -77,7 +77,7 @@ impl TopicFileOp {
 
     pub fn age_active_file(&mut self) -> Result<(), TopicFileOpError> {
         let Ok(mut locked_write_handle) = self.write_handle.lock() else {return Err(TopicFileOpError::CannotLock)};
-        let present_path = self.root_path.join(self.topic.clone());
+        let present_path = self.root_path.join(self.topic.as_str());
         let ancient_history_path = present_path.with_extension(ANCIENT_HISTORY_FILE_EXTENSION);
         let history_path = present_path.with_extension(HISTORY_FILE_EXTENSION);
 
@@ -115,7 +115,7 @@ impl TopicFileOp {
 
     pub fn open_active_file(&self, open_options: OpenOptions) -> Result<File, TopicFileOpError> {
         let Ok(locked_write_handle) = self.write_handle.lock() else {return Err(TopicFileOpError::CannotLock)};
-        let present_path = self.root_path.join(self.topic.clone());
+        let present_path = self.root_path.join(self.topic.as_str());
         let r = open_options.open(present_path);
         drop(locked_write_handle);
         r.map_err(TopicFileOpError::IoError)
@@ -129,7 +129,7 @@ impl TopicFileOp {
         let Ok(locked_write_handle) = self.write_handle.lock() else {return vec![]};
 
         let mut files = Vec::with_capacity(3);
-        let present_path = self.root_path.join(self.topic.clone());
+        let present_path = self.root_path.join(self.topic.as_str());
         let ancient_history_path = present_path.with_extension(ANCIENT_HISTORY_FILE_EXTENSION);
         let history_path = present_path.with_extension(HISTORY_FILE_EXTENSION);
         match open_options.open(ancient_history_path) {
@@ -157,7 +157,7 @@ impl TopicFileOp {
         &self,
         write_buffer_size: usize,
     ) -> Result<BufWriter<File>, TopicFileOpError> {
-        let present_path = self.root_path.join(self.topic.clone());
+        let present_path = self.root_path.join(self.topic.as_str());
         let work_path = present_path.with_extension(WORK_FILE_EXTENSION);
         let r = File::create(work_path);
         r.map(|write_handle| BufWriter::with_capacity(write_buffer_size, write_handle))
@@ -165,7 +165,7 @@ impl TopicFileOp {
     }
 
     pub fn recover_history_files(&self) -> Result<(), TopicFileOpError> {
-        let present_path = self.root_path.join(self.topic.clone());
+        let present_path = self.root_path.join(self.topic.as_str());
         let work_path = present_path.with_extension(WORK_FILE_EXTENSION);
         let ancient_history_path = present_path.with_extension(ANCIENT_HISTORY_FILE_EXTENSION);
         let history_path = present_path.with_extension(HISTORY_FILE_EXTENSION);
@@ -176,7 +176,7 @@ impl TopicFileOp {
     }
 
     pub fn replace_history_files(&self) -> Result<(), TopicFileOpError> {
-        let present_path = self.root_path.join(self.topic.clone());
+        let present_path = self.root_path.join(self.topic.as_str());
         let work_path = present_path.with_extension(WORK_FILE_EXTENSION);
         let ancient_history_path = present_path.with_extension(ANCIENT_HISTORY_FILE_EXTENSION);
         let history_path = present_path.with_extension(HISTORY_FILE_EXTENSION);
@@ -202,7 +202,7 @@ impl TopicFileOp {
         if let Some(write_handle) = locked_write_handle.as_mut() {
             f(write_handle).map(|size| (size, false))
         } else {
-            let present_path = self.root_path.join(self.topic.clone());
+            let present_path = self.root_path.join(self.topic.as_str());
             let r = open_options.clone().open(present_path);
             if let Ok(write_handle) = r {
                 let mut write_handle = BufWriter::with_capacity(write_buffer_size, write_handle);
@@ -234,9 +234,9 @@ mod tests {
         let current_path = root_path.join("topic");
         assert!(fs::File::create(&current_path).await.is_ok());
 
-        let topic = "topic";
+        let topic = Topic::from("topic");
 
-        let file_ops = TopicFileOp::new(root_path, topic.to_string());
+        let file_ops = TopicFileOp::new(root_path, topic);
 
         let mut open_options = OpenOptions::new();
         open_options.read(true);

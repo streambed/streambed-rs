@@ -3,9 +3,9 @@ use std::time::Duration;
 use std::{env, fs};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use streambed::commit_log::CommitLog;
 use streambed::commit_log::ProducerRecord;
 use streambed::commit_log::Subscription;
+use streambed::commit_log::{CommitLog, Topic};
 use streambed_logged::FileLog;
 use tokio_stream::StreamExt;
 
@@ -19,13 +19,13 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         let cl = FileLog::new(logged_dir);
 
-        let topic = "my-topic";
+        let topic = Topic::from("my-topic");
 
         let rt = tokio::runtime::Runtime::new().unwrap();
 
         rt.block_on(async {
             cl.produce(ProducerRecord {
-                topic: topic.to_string(),
+                topic: topic.clone(),
                 headers: vec![],
                 timestamp: None,
                 key: 0,
@@ -38,12 +38,13 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         b.to_async(&rt).iter(|| {
             let task_cl = cl.clone();
+            let task_topic = topic.clone();
             async move {
                 tokio::spawn(async move {
                     for _ in 1..SAMPLE_SIZE {
                         task_cl
                             .produce(ProducerRecord {
-                                topic: topic.to_string(),
+                                topic: task_topic.clone(),
                                 headers: vec![],
                                 timestamp: None,
                                 key: 0,
@@ -66,14 +67,14 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         let cl = FileLog::new(logged_dir);
 
-        let topic = "my-topic";
+        let topic = Topic::from("my-topic");
 
         let rt = tokio::runtime::Runtime::new().unwrap();
 
         rt.block_on(async {
             for _ in 0..SAMPLE_SIZE {
                 cl.produce(ProducerRecord {
-                    topic: topic.to_string(),
+                    topic: topic.clone(),
                     headers: vec![],
                     timestamp: None,
                     key: 0,
@@ -90,11 +91,12 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         b.to_async(&rt).iter(|| {
             let task_cl = cl.clone();
+            let task_topic = topic.clone();
             async move {
                 tokio::spawn(async move {
                     let offsets = vec![];
                     let subscriptions = vec![Subscription {
-                        topic: topic.to_string(),
+                        topic: task_topic.clone(),
                     }];
                     let mut records =
                         task_cl.scoped_subscribe("some-consumer", offsets, subscriptions, None);

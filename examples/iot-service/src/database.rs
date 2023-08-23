@@ -2,7 +2,7 @@ use std::{collections::VecDeque, time::Duration};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use streambed::commit_log::{CommitLog, ProducerRecord, Subscription};
+use streambed::commit_log::{CommitLog, ProducerRecord, Subscription, Topic};
 use streambed_logged::{compaction::NthKeyBasedRetention, FileLog};
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
@@ -41,7 +41,7 @@ pub async fn task(mut cl: FileLog, mut database_command_rx: mpsc::Receiver<Comma
     // the exceed MAX_EVENTS_TO_REPLY as we do not have a requirement to ever
     // return more than that.
     cl.register_compaction(
-        DEVICE_EVENTS_TOPIC.to_string(),
+        Topic::from(DEVICE_EVENTS_TOPIC),
         NthKeyBasedRetention::new(MAX_TOPIC_COMPACTION_KEYS, MAX_EVENTS_TO_REPLY),
     )
     .await
@@ -53,7 +53,7 @@ pub async fn task(mut cl: FileLog, mut database_command_rx: mpsc::Receiver<Comma
                 let offsets = vec![];
 
                 let subscriptions = vec![Subscription {
-                    topic: DEVICE_EVENTS_TOPIC.to_string(),
+                    topic: Topic::from(DEVICE_EVENTS_TOPIC),
                 }];
 
                 let mut records =
@@ -93,7 +93,7 @@ pub async fn task(mut cl: FileLog, mut database_command_rx: mpsc::Receiver<Comma
                 let mut buf = Vec::new();
                 if ciborium::ser::into_writer(&event, &mut buf).is_ok() {
                     let record = ProducerRecord {
-                        topic: DEVICE_EVENTS_TOPIC.to_string(),
+                        topic: Topic::from(DEVICE_EVENTS_TOPIC),
                         headers: vec![],
                         timestamp: Some(Utc::now()),
                         key: id,

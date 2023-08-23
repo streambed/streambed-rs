@@ -25,19 +25,19 @@ async fn kafka_rest_scoped_subscribe() {
             req_body,
             Consumer {
                 offsets: vec!(ConsumerOffset {
-                    topic: "default:end-device-events".to_string(),
+                    topic: Topic::from("default:end-device-events"),
                     partition: 0,
                     offset: 0,
                 }),
                 subscriptions: vec!(Subscription {
-                    topic: "default:end-device-events".to_string()
+                    topic: Topic::from("default:end-device-events")
                 }),
             }
         );
 
         let stream = stream! {
             yield Result::<_, Infallible>::Ok(serde_json::to_vec(&ConsumerRecord {
-                topic: "default:end-device-events".to_string(),
+                topic: Topic::from("default:end-device-events"),
                 headers: vec![],
                 timestamp: None,
                 key: 0,
@@ -47,7 +47,7 @@ async fn kafka_rest_scoped_subscribe() {
             }).unwrap());
 
             yield Result::<_, Infallible>::Ok(serde_json::to_vec(&ConsumerRecord {
-                topic: "default:end-device-events".to_string(),
+                topic: Topic::from("default:end-device-events"),
                 headers: vec![],
                 timestamp: None,
                 key: 0,
@@ -80,12 +80,12 @@ async fn kafka_rest_scoped_subscribe() {
     let events = cl.scoped_subscribe(
         "farmo-integrator",
         vec![ConsumerOffset {
-            topic: "default:end-device-events".to_string(),
+            topic: Topic::from("default:end-device-events"),
             partition: 0,
             offset: 0,
         }],
         vec![Subscription {
-            topic: "default:end-device-events".to_string(),
+            topic: Topic::from("default:end-device-events"),
         }],
         Some(Duration::from_millis(100)),
     );
@@ -94,7 +94,7 @@ async fn kafka_rest_scoped_subscribe() {
     assert_eq!(
         events.next().await,
         Some(ConsumerRecord {
-            topic: "default:end-device-events".to_string(),
+            topic: Topic::from("default:end-device-events"),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -106,7 +106,7 @@ async fn kafka_rest_scoped_subscribe() {
     assert_eq!(
         events.next().await,
         Some(ConsumerRecord {
-            topic: "default:end-device-events".to_string(),
+            topic: Topic::from("default:end-device-events"),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -138,7 +138,7 @@ async fn kafka_publish() {
             req_body,
             ProduceRequest {
                 records: vec![ProducerRecord {
-                    topic: "default:end-device-events".to_string(),
+                    topic: Topic::from("default:end-device-events"),
                     headers: vec![],
                     timestamp: None,
                     key: 0,
@@ -186,7 +186,7 @@ async fn kafka_publish() {
     );
 
     let record = ProducerRecord {
-        topic: "default:end-device-events".to_string(),
+        topic: Topic::from("default:end-device-events"),
         headers: vec![],
         timestamp: None,
         key: 0,
@@ -229,7 +229,7 @@ async fn kafka_offsets() {
     );
 
     let result = cl
-        .offsets("default:end-device-events".to_string(), 0)
+        .offsets(Topic::from("default:end-device-events"), 0)
         .await
         .unwrap();
     assert_eq!(

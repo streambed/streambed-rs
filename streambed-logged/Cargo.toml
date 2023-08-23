@@ -15,6 +15,7 @@ log = { workspace = true }
 postcard = { workspace = true, default-features = false, features = ["use-std", "use-crc"] }
 serde = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["chrono_0_4"] }
+smol_str = { workspace = true, features = ["serde"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["codec"] }

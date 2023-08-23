@@ -1878,6 +1878,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62bb4feee49fdd9f707ef802e22365a35de4b7b299de4763d44bfea899442ff9"
 
 [[package]]
+name = "smol_str"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74212e6bbe9a4352329b2f68ba3130c15a3f26fe88ff22dbdc6cdd58fa85e99c"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "socket2"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1912,6 +1921,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "sha2",
+ "smol_str",
  "tokio",
  "tokio-stream",
 ]
@@ -1954,6 +1964,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "smol_str",
  "streambed",
  "streambed-test",
  "test-log",
@@ -1978,6 +1989,7 @@ dependencies = [
  "postcard",
  "serde",
  "serde_with",
+ "smol_str",
  "streambed",
  "test-log",
  "tokio",
