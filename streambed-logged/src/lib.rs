@@ -25,8 +25,8 @@ use std::{
     time::Duration,
 };
 use streambed::commit_log::{
-    CommitLog, ConsumerOffset, ConsumerRecord, Header, Offset, PartitionOffsets, ProducedOffset,
-    ProducerError, ProducerRecord, Subscription, Topic, TopicRef,
+    CommitLog, ConsumerOffset, ConsumerRecord, Header, HeaderKey, Offset, PartitionOffsets,
+    ProducedOffset, ProducerError, ProducerRecord, Subscription, Topic,
 };
 use streambed::commit_log::{Key, Partition};
 use tokio::{
@@ -79,7 +79,7 @@ pub struct FileLog {
 
 #[derive(Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
 pub struct StorableHeader {
-    key: String,
+    key: HeaderKey,
     value: Vec<u8>,
 }
 
@@ -145,7 +145,7 @@ impl FileLog {
     /// Frees resources associated with a topic, but not any associated compaction.
     /// Invoking the method is benign in that if consuming or producing occurs
     /// on this post closing, resources will be re-established.
-    pub fn close_topic(&mut self, topic: TopicRef) {
+    pub fn close_topic(&mut self, topic: &Topic) {
         if let Ok(mut locked_producer_txs) = self.producer_txs.lock() {
             locked_producer_txs.remove(topic);
         }
@@ -227,7 +227,7 @@ impl FileLog {
     }
 
     /// Unregister compaction for a given topic
-    pub fn unregister_compaction(&mut self, topic: TopicRef) {
+    pub fn unregister_compaction(&mut self, topic: &Topic) {
         if let Ok(mut compactors) = self.compactor_txs.lock() {
             compactors.remove(topic);
         }
@@ -594,13 +594,13 @@ impl CommitLog for FileLog {
 
 fn acquire_topic_file_ops(
     root_path: &Path,
-    topic: TopicRef,
+    topic: &Topic,
     topic_file_ops: &mut HashMap<Topic, TopicFileOp>,
 ) -> TopicFileOp {
     if let Some(topic_file_op) = topic_file_ops.get(topic) {
         topic_file_op.clone()
     } else {
-        let topic = topic.to_string();
+        let topic = topic.clone();
         let topic_file_op = TopicFileOp::new(root_path.to_path_buf(), topic.clone());
         topic_file_ops.insert(topic, topic_file_op.clone());
         topic_file_op
@@ -782,14 +782,15 @@ mod tests {
         let cl = FileLog::new(logged_dir);
         let task_cl = cl.clone();
 
-        let topic = "my-topic";
+        let topic = Topic::from("my-topic");
 
-        assert!(cl.offsets(topic.to_string(), 0).await.is_none());
+        assert!(cl.offsets(topic.clone(), 0).await.is_none());
 
+        let task_topic = topic.clone();
         tokio::spawn(async move {
             task_cl
                 .produce(ProducerRecord {
-                    topic: topic.to_string(),
+                    topic: task_topic.clone(),
                     headers: vec![],
                     timestamp: None,
                     key: 0,
@@ -800,7 +801,7 @@ mod tests {
                 .unwrap();
             task_cl
                 .produce(ProducerRecord {
-                    topic: topic.to_string(),
+                    topic: task_topic.clone(),
                     headers: vec![],
                     timestamp: None,
                     key: 0,
@@ -811,7 +812,7 @@ mod tests {
                 .unwrap();
             task_cl
                 .produce(ProducerRecord {
-                    topic: topic.to_string(),
+                    topic: task_topic.clone(),
                     headers: vec![],
                     timestamp: None,
                     key: 0,
@@ -822,7 +823,7 @@ mod tests {
                 .unwrap();
 
             time::sleep(TOPIC_FILE_PRODUCER_FLUSH * 2).await;
-            let offsets = task_cl.offsets(topic.to_string(), 0).await.unwrap();
+            let offsets = task_cl.offsets(task_topic, 0).await.unwrap();
             assert_eq!(
                 offsets,
                 PartitionOffsets {
@@ -833,19 +834,19 @@ mod tests {
         });
 
         let offsets = vec![ConsumerOffset {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             partition: 0,
             offset: 1,
         }];
         let subscriptions = vec![Subscription {
-            topic: topic.to_string(),
+            topic: topic.clone(),
         }];
         let mut records = cl.scoped_subscribe("some-consumer", offsets, subscriptions, None);
 
         assert_eq!(
             records.next().await,
             Some(ConsumerRecord {
-                topic: topic.to_string(),
+                topic,
                 headers: vec![],
                 timestamp: None,
                 key: 0,
@@ -867,18 +868,19 @@ mod tests {
         let mut cl = FileLog::new(logged_dir.clone());
         let mut task_cl = cl.clone();
 
-        let topic = "my-topic";
+        let topic = Topic::from("my-topic");
 
-        cl.register_compaction(topic.to_string(), compaction::KeyBasedRetention::new(1))
+        cl.register_compaction(topic.clone(), compaction::KeyBasedRetention::new(1))
             .await
             .unwrap();
 
-        assert!(cl.offsets(topic.to_string(), 0).await.is_none());
+        assert!(cl.offsets(topic.clone(), 0).await.is_none());
 
+        let task_topic = topic.clone();
         tokio::spawn(async move {
             task_cl
                 .produce(ProducerRecord {
-                    topic: topic.to_string(),
+                    topic: task_topic.clone(),
                     headers: vec![],
                     timestamp: None,
                     key: 0,
@@ -889,7 +891,7 @@ mod tests {
                 .unwrap();
             task_cl
                 .produce(ProducerRecord {
-                    topic: topic.to_string(),
+                    topic: task_topic.clone(),
                     headers: vec![],
                     timestamp: None,
                     key: 0,
@@ -905,13 +907,13 @@ mod tests {
 
             let mut topic_file_op = {
                 let locked_topic_file_ops = task_cl.topic_file_ops.lock().unwrap();
-                locked_topic_file_ops.get(topic).unwrap().clone()
+                locked_topic_file_ops.get(&task_topic).unwrap().clone()
             };
             topic_file_op.age_active_file().unwrap();
 
             task_cl
                 .produce(ProducerRecord {
-                    topic: topic.to_string(),
+                    topic: task_topic.clone(),
                     headers: vec![],
                     timestamp: None,
                     key: 0,
@@ -922,7 +924,7 @@ mod tests {
                 .unwrap();
 
             time::sleep(TOPIC_FILE_PRODUCER_FLUSH * 2).await;
-            let offsets = task_cl.offsets(topic.to_string(), 0).await.unwrap();
+            let offsets = task_cl.offsets(task_topic.clone(), 0).await.unwrap();
             assert_eq!(
                 offsets,
                 PartitionOffsets {
@@ -931,29 +933,29 @@ mod tests {
                 }
             );
 
-            let topic_file_path = logged_dir.join(topic);
+            let topic_file_path = logged_dir.join(task_topic.as_str());
             assert!(topic_file_path.exists());
             assert!(topic_file_path
                 .with_extension(topic_file_op::HISTORY_FILE_EXTENSION)
                 .exists());
 
-            task_cl.close_topic(topic);
+            task_cl.close_topic(&task_topic);
         });
 
         let offsets = vec![ConsumerOffset {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             partition: 0,
             offset: 1,
         }];
         let subscriptions = vec![Subscription {
-            topic: topic.to_string(),
+            topic: topic.clone(),
         }];
         let mut records = cl.scoped_subscribe("some-consumer", offsets, subscriptions, None);
 
         assert_eq!(
             records.next().await,
             Some(ConsumerRecord {
-                topic: topic.to_string(),
+                topic,
                 headers: vec![],
                 timestamp: None,
                 key: 0,
@@ -974,7 +976,7 @@ mod tests {
         let cl = FileLog::new(logged_dir);
         let task_cl = cl.clone();
 
-        let topic = "my-topic";
+        let topic = Topic::from("my-topic");
 
         let subscribing = Arc::new(Notify::new());
         let task_subscribing = subscribing.clone();
@@ -982,10 +984,9 @@ mod tests {
         let produced = Arc::new(Notify::new());
         let task_produced = produced.clone();
 
+        let task_topic = topic.clone();
         tokio::spawn(async move {
-            let subscriptions = vec![Subscription {
-                topic: topic.to_string(),
-            }];
+            let subscriptions = vec![Subscription { topic: task_topic }];
             let mut records =
                 task_cl.scoped_subscribe("some-consumer", vec![], subscriptions, None);
             task_subscribing.notify_one();
@@ -999,7 +1000,7 @@ mod tests {
         time::sleep(TOPIC_FILE_CONSUMER_POLL + Duration::from_millis(500)).await;
 
         cl.produce(ProducerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -1020,15 +1021,15 @@ mod tests {
 
         let cl = FileLog::new(logged_dir);
 
-        let topic = "my-topic";
+        let topic = Topic::from("my-topic");
 
         let offsets = vec![ConsumerOffset {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             partition: 0,
             offset: 1,
         }];
         let subscriptions = vec![Subscription {
-            topic: topic.to_string(),
+            topic: topic.clone(),
         }];
         let mut records = cl.scoped_subscribe(
             "some-consumer",
@@ -1039,7 +1040,7 @@ mod tests {
         assert!(records.next().await.is_none());
 
         cl.produce(ProducerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -1049,9 +1050,7 @@ mod tests {
         .await
         .unwrap();
 
-        let subscriptions = vec![Subscription {
-            topic: topic.to_string(),
-        }];
+        let subscriptions = vec![Subscription { topic }];
         let mut records = cl.scoped_subscribe(
             "some-consumer",
             vec![],
@@ -1071,10 +1070,10 @@ mod tests {
 
         let cl = FileLog::new(logged_dir.clone());
 
-        let topic = "my-topic";
+        let topic = Topic::from("my-topic");
 
         cl.produce(ProducerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -1084,7 +1083,7 @@ mod tests {
         .await
         .unwrap();
         cl.produce(ProducerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -1094,7 +1093,7 @@ mod tests {
         .await
         .unwrap();
         cl.produce(ProducerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -1109,7 +1108,7 @@ mod tests {
 
         // Now corrupt the log by knocking a few bytes off the end
 
-        let topic_file_path = logged_dir.join(topic);
+        let topic_file_path = logged_dir.join(topic.as_str());
         let topic_file = fs::OpenOptions::new()
             .write(true)
             .open(topic_file_path)
@@ -1124,7 +1123,7 @@ mod tests {
         let cl = FileLog::new(logged_dir.clone());
 
         cl.produce(ProducerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -1135,19 +1134,19 @@ mod tests {
         .unwrap();
 
         let offsets = vec![ConsumerOffset {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             partition: 0,
             offset: 0,
         }];
         let subscriptions = vec![Subscription {
-            topic: topic.to_string(),
+            topic: topic.clone(),
         }];
         let mut records = cl.scoped_subscribe("some-consumer", offsets, subscriptions, None);
 
         assert_eq!(
             records.next().await,
             Some(ConsumerRecord {
-                topic: topic.to_string(),
+                topic: topic.clone(),
                 headers: vec![],
                 timestamp: None,
                 key: 0,
@@ -1160,7 +1159,7 @@ mod tests {
         assert_eq!(
             records.next().await,
             Some(ConsumerRecord {
-                topic: topic.to_string(),
+                topic,
                 headers: vec![],
                 timestamp: None,
                 key: 0,

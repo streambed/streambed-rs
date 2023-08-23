@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{base64::Base64, serde_as};
+use smol_str::SmolStr;
 use tokio_stream::Stream;
 
 /// An offset into a commit log. Offsets are used to address
@@ -31,17 +32,17 @@ pub type Partition = u32;
 /// may be namespaced by prefixing with characters followed by
 /// a `:`. For example, "my-ns:my-topic". In the absence of
 /// a namespace, the server will assume a default namespace.
-pub type Topic = String;
+pub type Topic = SmolStr;
 
-/// A ref to a topic
-pub type TopicRef<'a> = &'a str;
+/// Header key type
+pub type HeaderKey = SmolStr;
 
 /// A header provides a means of augmenting a record with
 /// meta-data.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Header {
-    pub key: String,
+    pub key: HeaderKey,
     #[serde_as(as = "Base64")]
     pub value: Vec<u8>,
 }
@@ -205,7 +206,7 @@ mod tests {
             serde_json::from_str::<Consumer>(json).unwrap(),
             Consumer {
                 offsets: vec![ConsumerOffset {
-                    topic: "topic".to_string(),
+                    topic: Topic::from("topic"),
                     partition: 0,
                     offset: 0
                 }],

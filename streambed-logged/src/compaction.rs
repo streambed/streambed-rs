@@ -569,10 +569,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_key_based_retention() {
-        let topic = "my-topic";
+        let topic = Topic::from("my-topic");
 
         let r0 = ConsumerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -582,7 +582,7 @@ mod tests {
         };
 
         let r1 = ConsumerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 1,
@@ -592,7 +592,7 @@ mod tests {
         };
 
         let r2 = ConsumerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -628,10 +628,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_nth_key_based_retention() {
-        let topic = "my-topic";
+        let topic = Topic::from("my-topic");
 
         let r0 = ConsumerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -641,7 +641,7 @@ mod tests {
         };
 
         let r1 = ConsumerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 1,
@@ -651,7 +651,7 @@ mod tests {
         };
 
         let r2 = ConsumerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -661,7 +661,7 @@ mod tests {
         };
 
         let r3 = ConsumerRecord {
-            topic: topic.to_string(),
+            topic: topic.clone(),
             headers: vec![],
             timestamp: None,
             key: 0,
@@ -783,8 +783,8 @@ mod tests {
     struct TemperatureSensorTopic;
 
     impl TemperatureSensorTopic {
-        fn name() -> String {
-            "temp-sensor-events".to_string()
+        fn name() -> Topic {
+            Topic::from("temp-sensor-events")
         }
     }
 
@@ -956,7 +956,7 @@ mod tests {
         ) -> Pin<Box<dyn Stream<Item = ConsumerRecord> + Send + 'a>> {
             Box::pin(stream!({
                 yield ConsumerRecord {
-                    topic: "".to_string(),
+                    topic: Topic::from(""),
                     headers: vec![],
                     timestamp: None,
                     key: 0,
@@ -965,7 +965,7 @@ mod tests {
                     offset: 0,
                 };
                 yield ConsumerRecord {
-                    topic: "".to_string(),
+                    topic: Topic::from(""),
                     headers: vec![],
                     timestamp: None,
                     key: 1,
@@ -1003,7 +1003,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_compactor_end_to_end() {
-        let topic = "my-topic";
+        let topic = Topic::from("my-topic");
 
         let compaction_dir = env::temp_dir().join("test_compactor_end_to_end");
         let _ = fs::remove_dir_all(&compaction_dir);
@@ -1012,7 +1012,7 @@ mod tests {
 
         let cl = TestCommitLog;
         let cs = TestCompactionStrategy;
-        let sts = ScopedTopicSubscriber::new(cl, topic.to_string());
+        let sts = ScopedTopicSubscriber::new(cl, topic);
 
         let num_ages = Arc::new(AtomicU32::new(0));
         let tso_num_ages = num_ages.clone();

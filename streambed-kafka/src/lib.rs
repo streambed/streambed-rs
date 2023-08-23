@@ -86,7 +86,7 @@ impl CommitLog for KafkaRestCommitLog {
                 Ok(response) => {
                     if response.status().is_success() {
                         trace!("Retrieved offsets for: {} {}", topic, partition);
-                        increment_counter!("offset_replies",  TOPIC_LABEL => topic);
+                        increment_counter!("offset_replies",  TOPIC_LABEL => topic.to_string());
                         break response.json::<PartitionOffsets>().await.ok();
                     } else {
                         debug!(
@@ -128,7 +128,7 @@ impl CommitLog for KafkaRestCommitLog {
                 Ok(response) => {
                     if response.status().is_success() {
                         trace!("Produced record: {:?}", record);
-                        increment_counter!("producer_replies",  TOPIC_LABEL => record.topic.to_owned());
+                        increment_counter!("producer_replies",  TOPIC_LABEL => record.topic.to_string());
                         break response
                             .json::<ProduceReply>()
                             .await
@@ -191,7 +191,7 @@ impl CommitLog for KafkaRestCommitLog {
                         .map(|((topic, partition), offset)| ConsumerOffset {
                             offset: *offset,
                             partition: *partition,
-                            topic: topic.to_string(),
+                            topic: topic.clone(),
                         })
                         .collect(),
                     subscriptions: subscriptions.clone(),
@@ -223,7 +223,7 @@ impl CommitLog for KafkaRestCommitLog {
                                     let topic = record.topic.to_owned();
                                     let partition = record.partition;
                                     let record_offset = record.offset;
-                                    increment_counter!("consumer_group_replies", CONSUMER_GROUP_NAME_LABEL => consumer_group_name.to_string(), TOPIC_LABEL => topic.clone());
+                                    increment_counter!("consumer_group_replies", CONSUMER_GROUP_NAME_LABEL => consumer_group_name.to_string(), TOPIC_LABEL => topic.to_string());
                                     yield record;
 
                                     let _ = offsets.insert((topic, partition), record_offset);
