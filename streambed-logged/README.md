@@ -16,10 +16,10 @@ it. Please refer to the various tests for more complete examples.
 ```rs
   let cl = FileLog::new(logged_dir);
 
-  let topic = "my-topic";
+  let topic = Topic::from("my-topic"_;
 
   cl.produce(ProducerRecord {
-      topic: topic.to_string(),
+      topic: topic.clone(),
       headers: None,
       timestamp: None,
       key: 0,
@@ -30,14 +30,14 @@ it. Please refer to the various tests for more complete examples.
   .unwrap();
 
   let subscriptions = vec![Subscription {
-      topic: topic.to_string(),
+      topic: topic.clone(),
   }];
   let mut records = cl.scoped_subscribe("some-consumer", None, subscriptions, None);
 
   assert_eq!(
       records.next().await,
       Some(ConsumerRecord {
-          topic: topic.to_string(),
+          topic,
           headers: None,
           timestamp: None,
           key: 0,
