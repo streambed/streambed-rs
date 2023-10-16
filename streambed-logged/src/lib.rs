@@ -169,7 +169,9 @@ impl FileLog {
         CS: CompactionStrategy + Send + Sync + 'static,
     {
         let topic_file_op = {
-            let Ok(mut locked_topic_file_ops) = self.topic_file_ops.lock() else {return Err(CompactionRegistrationError)};
+            let Ok(mut locked_topic_file_ops) = self.topic_file_ops.lock() else {
+                return Err(CompactionRegistrationError);
+            };
             acquire_topic_file_ops(&self.root_path, &topic, &mut locked_topic_file_ops)
         };
 
@@ -237,7 +239,9 @@ impl FileLog {
 #[async_trait]
 impl CommitLog for FileLog {
     async fn offsets(&self, topic: Topic, _partition: Partition) -> Option<PartitionOffsets> {
-        let Ok(mut locked_topic_file_ops) = self.topic_file_ops.lock() else {return None};
+        let Ok(mut locked_topic_file_ops) = self.topic_file_ops.lock() else {
+            return None;
+        };
         let topic_file_op =
             acquire_topic_file_ops(&self.root_path, &topic, &mut locked_topic_file_ops);
         drop(locked_topic_file_ops);
@@ -255,7 +259,7 @@ impl CommitLog for FileLog {
     async fn produce(&self, record: ProducerRecord) -> ProduceReply {
         let topic_producer = {
             let Ok(mut locked_producer_map) = self.producer_txs.lock() else {
-                return Err(ProducerError::CannotProduce)
+                return Err(ProducerError::CannotProduce);
             };
             if let Some(topic_producer) = locked_producer_map.get(&record.topic) {
                 let producer_tx = topic_producer.clone();
@@ -267,7 +271,9 @@ impl CommitLog for FileLog {
                 locked_producer_map.insert(record.topic.clone(), producer_tx.clone());
                 drop(locked_producer_map); // drop early so we don't double-lock with the next thing
 
-                let Ok(mut locked_topic_file_ops) = self.topic_file_ops.lock() else {return Err(ProducerError::CannotProduce)};
+                let Ok(mut locked_topic_file_ops) = self.topic_file_ops.lock() else {
+                    return Err(ProducerError::CannotProduce);
+                };
                 let mut topic_file_op = acquire_topic_file_ops(
                     &self.root_path,
                     &record.topic,
@@ -474,7 +480,7 @@ impl CommitLog for FileLog {
 
                     let topic_file_op = {
                         let Ok(mut locked_topic_file_ops) = task_topic_file_ops.lock() else {
-                            break
+                            break;
                         };
                         let topic_file_op = acquire_topic_file_ops(
                             &task_root_path,
@@ -674,8 +680,8 @@ fn recover_active_file(
     let mut bytes_read = None;
     loop {
         let Ok(len) = read_buf(&mut topic_file, &mut buf) else {
-                break;
-            };
+            break;
+        };
 
         let before_decode_len = buf.len();
 

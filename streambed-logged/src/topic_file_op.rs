@@ -66,7 +66,9 @@ impl TopicFileOp {
         // Ensure the active file is opened for appending first.
         let _ = self.with_active_file(open_options, write_buffer_size, |_| Ok(0))?;
 
-        let Ok(mut locked_write_handle) = self.write_handle.lock() else {return Err(TopicFileOpError::CannotLock)};
+        let Ok(mut locked_write_handle) = self.write_handle.lock() else {
+            return Err(TopicFileOpError::CannotLock);
+        };
         let r = if let Some(write_handle) = locked_write_handle.as_mut() {
             write_handle.get_ref().metadata().map(|m| m.len())
         } else {
@@ -76,7 +78,9 @@ impl TopicFileOp {
     }
 
     pub fn age_active_file(&mut self) -> Result<(), TopicFileOpError> {
-        let Ok(mut locked_write_handle) = self.write_handle.lock() else {return Err(TopicFileOpError::CannotLock)};
+        let Ok(mut locked_write_handle) = self.write_handle.lock() else {
+            return Err(TopicFileOpError::CannotLock);
+        };
         let present_path = self.root_path.join(self.topic.as_str());
         let ancient_history_path = present_path.with_extension(ANCIENT_HISTORY_FILE_EXTENSION);
         let history_path = present_path.with_extension(HISTORY_FILE_EXTENSION);
@@ -104,7 +108,9 @@ impl TopicFileOp {
     }
 
     pub fn flush_active_file(&self) -> Result<(), TopicFileOpError> {
-        let Ok(mut locked_write_handle) = self.write_handle.lock() else {return Err(TopicFileOpError::CannotLock)};
+        let Ok(mut locked_write_handle) = self.write_handle.lock() else {
+            return Err(TopicFileOpError::CannotLock);
+        };
         let r = if let Some(write_handle) = locked_write_handle.as_mut() {
             write_handle.flush()
         } else {
@@ -114,7 +120,9 @@ impl TopicFileOp {
     }
 
     pub fn open_active_file(&self, open_options: OpenOptions) -> Result<File, TopicFileOpError> {
-        let Ok(locked_write_handle) = self.write_handle.lock() else {return Err(TopicFileOpError::CannotLock)};
+        let Ok(locked_write_handle) = self.write_handle.lock() else {
+            return Err(TopicFileOpError::CannotLock);
+        };
         let present_path = self.root_path.join(self.topic.as_str());
         let r = open_options.open(present_path);
         drop(locked_write_handle);
@@ -126,7 +134,9 @@ impl TopicFileOp {
         open_options: OpenOptions,
         exclude_active_file: bool,
     ) -> Vec<io::Result<File>> {
-        let Ok(locked_write_handle) = self.write_handle.lock() else {return vec![]};
+        let Ok(locked_write_handle) = self.write_handle.lock() else {
+            return vec![];
+        };
 
         let mut files = Vec::with_capacity(3);
         let present_path = self.root_path.join(self.topic.as_str());
@@ -198,7 +208,9 @@ impl TopicFileOp {
     where
         F: FnOnce(&mut BufWriter<File>) -> Result<usize, TopicFileOpError>,
     {
-        let Ok(mut locked_write_handle) = self.write_handle.lock() else {return Err(TopicFileOpError::CannotLock)};
+        let Ok(mut locked_write_handle) = self.write_handle.lock() else {
+            return Err(TopicFileOpError::CannotLock);
+        };
         if let Some(write_handle) = locked_write_handle.as_mut() {
             f(write_handle).map(|size| (size, false))
         } else {

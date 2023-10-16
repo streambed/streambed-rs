@@ -6,4 +6,10 @@ edition = "2021"
 [dependencies]
 http = { workspace = true }
 hyper = { workspace = true, default-features = false, features = ["tcp", "stream", "http1", "http2", "client", "server", "runtime"] }
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = [
+    "sync",
+    "macros",
+    "io-util",
+    "rt",
+    "time",
+] }

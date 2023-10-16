@@ -5,4 +5,10 @@ edition = "2021"
 
 [dependencies]
 async-trait = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = [
+    "sync",
+    "macros",
+    "io-util",
+    "rt",
+    "time",
+] }

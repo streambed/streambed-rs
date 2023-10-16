@@ -12,9 +12,15 @@ log = { workspace = true }
 metrics = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = [
+    "sync",
+    "macros",
+    "io-util",
+    "rt",
+    "time",
+] }
 
-streambed = { path = "../streambed" }
+streambed = { path = "../streambed", features = ["reqwest"] }
 
 [dev-dependencies]
 env_logger = { workspace = true }

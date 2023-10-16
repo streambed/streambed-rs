@@ -14,13 +14,23 @@ hex = { workspace = true }
 hmac = { workspace = true }
 log = { workspace = true }
 rand = { workspace = true }
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["base64"] }
 sha2 = { workspace = true }
 smol_str = { workspace = true, features = ["serde"] }
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = [
+    "sync",
+    "macros",
+    "io-util",
+    "rt",
+    "time",
+] }
 tokio-stream = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+
+[features]
+# Use the reqwest library with its default features incl. TLS
+reqwest = ["dep:reqwest"]

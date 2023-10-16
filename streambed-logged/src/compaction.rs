@@ -504,7 +504,11 @@ where
                                         offset: record.offset,
                                     };
 
-                                    let Ok(buf) = postcard::to_stdvec_crc32(&storable_record, CRC.digest()) else {return Err(CompactionError::CannotSerialize)};
+                                    let Ok(buf) =
+                                        postcard::to_stdvec_crc32(&storable_record, CRC.digest())
+                                    else {
+                                        return Err(CompactionError::CannotSerialize);
+                                    };
                                     writer.write_all(&buf).map_err(CompactionError::IoError)?;
                                 }
                             }

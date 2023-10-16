@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 
 members = [
     "streambed",
@@ -14,7 +15,7 @@ members = [
 ]
 
 [workspace.dependencies]
-aes ="0.8.2"
+aes = "0.8.2"
 async-stream = "0.3.3"
 async-trait = "0.1.60"
 base64 = "0.20.0"
@@ -35,9 +36,9 @@ humantime = "2.1.0"
 hyper = { version = "0.14.23", default-features = false }
 log = "0.4.17"
 metrics = { version = "0.20.1", default-features = false }
-postcard = { version = "1.0.2", default-features = false }
+postcard = { version = "1.0.8", default-features = false }
 rand = "0.8.5"
-reqwest = "0.11.13"
+reqwest = { version = "0.11.13" }
 scopeguard = "1.1"
 serde = "1.0.151"
 serde_json = "1.0.90"
@@ -45,11 +46,7 @@ serde_with = "2.0.1"
 sha2 = "0.10.6"
 smol_str = "0.2.0"
 test-log = "0.2.11"
-tokio = "1.23.0"
+tokio = { version = "1.23.0" }
 tokio-stream = "0.1.11"
 tokio-util = "0.7.4"
 warp = "0.3"
-
-
-[patch.crates-io]
-postcard = { git = "https://github.com/jamesmunns/postcard.git", rev = "a0ef8a2f90f53f1c30a554624c187a9672d098c9" }
