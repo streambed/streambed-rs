@@ -22,24 +22,25 @@ pub fn routes(
                         return warp::reply::with_status(
                             warp::reply::json(&"An id is required"),
                             StatusCode::BAD_REQUEST,
-                        )
+                        );
                     };
 
                     let Ok(id) = id.parse() else {
                         return warp::reply::with_status(
                             warp::reply::json(&"Invalid id - must be a number"),
                             StatusCode::BAD_REQUEST,
-                        )
+                        );
                     };
 
                     let Ok(events) = task_database_command_tx
                         .ask(|reply_to| database::Command::Get(id, reply_to))
-                        .await else {
-                            return warp::reply::with_status(
-                                warp::reply::json(&"Service unavailable"),
-                                StatusCode::SERVICE_UNAVAILABLE,
-                            )
-                         };
+                        .await
+                    else {
+                        return warp::reply::with_status(
+                            warp::reply::json(&"Service unavailable"),
+                            StatusCode::SERVICE_UNAVAILABLE,
+                        );
+                    };
 
                     warp::reply::with_status(warp::reply::json(&events), StatusCode::OK)
                 }

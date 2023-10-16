@@ -65,7 +65,9 @@ pub async fn task(mut cl: FileLog, mut database_command_rx: mpsc::Receiver<Comma
                         let Some(timestamp) = record.timestamp else {
                             continue;
                         };
-                        let Ok(database_event) = ciborium::de::from_reader::<Event, _>(&*record.value) else {
+                        let Ok(database_event) =
+                            ciborium::de::from_reader::<Event, _>(&*record.value)
+                        else {
                             continue;
                         };
                         if events.len() == MAX_EVENTS_TO_REPLY {
