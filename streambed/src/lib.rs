@@ -1,6 +1,5 @@
 #![doc = include_str!("../../README.md")]
 
-use std::error::Error;
 use std::io::{self, BufRead, BufReader, Read};
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,6 +7,7 @@ use std::time::Duration;
 use crypto::SALT_SIZE;
 use log::{debug, info, warn};
 use rand::RngCore;
+#[cfg(feature = "reqwest")]
 use reqwest::Certificate;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
@@ -30,7 +30,8 @@ pub fn read_line<R: Read>(reader: R) -> Result<String, io::Error> {
 }
 
 /// Read a pem file and return its corresponding Reqwest certificate.
-pub async fn read_pem<R: Read>(mut reader: R) -> Result<Certificate, Box<dyn Error>> {
+#[cfg(feature = "reqwest")]
+pub async fn read_pem<R: Read>(mut reader: R) -> Result<Certificate, Box<dyn std::error::Error>> {
     let mut buf = vec![];
     reader.read_to_end(&mut buf)?;
     Certificate::from_pem(&buf).map_err(|e| e.into())

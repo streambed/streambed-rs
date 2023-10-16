@@ -16,7 +16,13 @@ postcard = { workspace = true, default-features = false, features = ["use-std", 
 serde = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["chrono_0_4"] }
 smol_str = { workspace = true, features = ["serde"] }
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = [
+    "sync",
+    "macros",
+    "io-util",
+    "rt",
+    "time",
+] }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["codec"] }
 
