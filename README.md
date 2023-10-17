@@ -44,6 +44,10 @@ Streambed is entirely open source providing cost benefits, fast-time-to-market, 
 
 Streambed leverages Rust's characteristics of writing fast and efficient software correctly.
 
+## Minimum supported Rust
+
+streambed-rs requires a minimum of Rust version 1.70.0 stable (June 2023), but the most recent stable version of Rust is recommended.
+
 ## A brief history and why Rust
 
 Streambed-jvm first manifested itself as a Scala based-project with similar goals to streambed-rs and 
