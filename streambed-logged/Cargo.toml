@@ -3,6 +3,9 @@ name = "streambed-logged"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Logged is a small library that implements a file-system-based commit log"
 
 [dependencies]
 async-stream = { workspace = true }
@@ -17,6 +20,7 @@ postcard = { workspace = true, default-features = false, features = ["use-std", 
 serde = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["chrono_0_4"] }
 smol_str = { workspace = true, features = ["serde"] }
+streambed = { workspace = true }
 tokio = { workspace = true, features = [
     "sync",
     "macros",
@@ -26,8 +30,6 @@ tokio = { workspace = true, features = [
 ] }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["codec"] }
-
-streambed = { path = "../streambed" }
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["async_tokio", "html_reports"] }

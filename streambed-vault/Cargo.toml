@@ -3,6 +3,9 @@ name = "streambed-vault"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Provides an implementation of the Streambed secret store to be used with the Hashicorp Vault API"
 
 [dependencies]
 async-trait = { workspace = true }
@@ -13,6 +16,7 @@ log = { workspace = true }
 metrics = { workspace = true, default-features = false }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
+streambed = { workspace = true }
 tokio = { workspace = true, features = [
     "sync",
     "macros",
@@ -20,8 +24,6 @@ tokio = { workspace = true, features = [
     "rt",
     "time",
 ] }
-
-streambed = { path = "../streambed", features = ["reqwest"] }
 
 [dev-dependencies]
 env_logger = { workspace = true }
@@ -31,4 +33,4 @@ hyper = { workspace = true, default-features = false, features = ["tcp", "stream
 test-log = { workspace = true }
 tokio-stream = { workspace = true }
 
-streambed-test = { path = "../streambed-test" }
+streambed-test = { path = "../streambed-test", version = "0.1.0" }

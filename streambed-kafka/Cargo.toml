@@ -3,6 +3,9 @@ name = "streambed-kafka"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Provides commit log functionality to connect with the Kafka HTTP API"
 
 [dependencies]
 async-stream = { workspace = true }
@@ -15,6 +18,7 @@ reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 smol_str = { workspace = true, features = ["serde"] }
+streambed = { workspace = true, features = ["reqwest"] }
 tokio = { workspace = true, features = [
     "sync",
     "macros",
@@ -23,8 +27,6 @@ tokio = { workspace = true, features = [
     "time",
 ] }
 tokio-stream = { workspace = true }
-
-streambed = { path = "../streambed", features = ["reqwest"] }
 
 [dev-dependencies]
 env_logger ={ workspace = true }

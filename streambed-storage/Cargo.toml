@@ -3,6 +3,9 @@ name = "streambed-storage"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Functionality for loading an persisting structures"
 
 [dependencies]
 async-trait = { workspace = true }
@@ -11,6 +14,7 @@ humantime = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+streambed = { workspace = true }
 tokio = { workspace = true, features = [
     "sync",
     "macros",
@@ -18,5 +22,3 @@ tokio = { workspace = true, features = [
     "rt",
     "time",
 ] }
-
-streambed = { path = "../streambed" }

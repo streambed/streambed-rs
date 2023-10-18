@@ -1,4 +1,4 @@
-#![doc = include_str!("../../README.md")]
+#![doc = include_str!("../README.md")]
 
 use std::io::{self, BufRead, BufReader, Read};
 use std::sync::Arc;

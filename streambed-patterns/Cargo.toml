@@ -3,6 +3,9 @@ name = "streambed-patterns"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Patterns for working with streambed"
 
 [dependencies]
 async-trait = { workspace = true }

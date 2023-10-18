@@ -27,7 +27,7 @@ where
 
 /// Performs an AES-128 CTR-blockmode-style decryption as used by
 /// LoRaWAN FRMPayloads. For more information on CTR:
-/// https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Counter_(CTR)
+/// <https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Counter_(CTR)>
 /// This is the same as the `encrypt` function, but named differently
 /// to convey intent.
 #[inline]
@@ -37,7 +37,7 @@ pub fn decrypt(bytes: &mut [u8], key: &[u8; KEY_SIZE], salt: &[u8; SALT_SIZE]) {
 
 /// Performs an AES-128 CTR-blockmode-style encryption as used by
 /// LoRaWAN FRMPayloads. For more information on CTR:
-/// https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Counter_(CTR)
+/// <https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Counter_(CTR)>
 pub fn encrypt(bytes: &mut [u8], key: &[u8; KEY_SIZE], salt: &[u8; SALT_SIZE]) {
     use aes::cipher::KeyInit;
     let key = GenericArray::from_slice(key);
