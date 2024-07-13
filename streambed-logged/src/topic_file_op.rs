@@ -29,6 +29,7 @@ pub(crate) const WORK_FILE_EXTENSION: &str = "work";
 pub(crate) enum TopicFileOpError {
     CannotLock,
     CannotSerialize,
+    #[allow(dead_code)]
     IoError(io::Error),
 }
 impl Display for TopicFileOpError {

@@ -48,7 +48,7 @@ pub struct AuthenticationTask {
 /// task to re-authenticate on token expiry. A timeout is provided to cause the
 /// re-authentication to sleep between non-successful authentication attempts.
 pub async fn reauthenticate_secret_store(
-    ss: impl secret_store::SecretStore + Sync + Send + Clone + 'static,
+    ss: impl secret_store::SecretStore + 'static,
     role_id: &str,
     secret_id: &str,
     unauthenticated_timeout: Duration,

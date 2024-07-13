@@ -342,6 +342,7 @@ where
 #[derive(Debug)]
 enum CompactionError {
     CannotSerialize,
+    #[allow(dead_code)]
     IoError(io::Error),
 }
 
