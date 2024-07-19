@@ -1,0 +1,24 @@
+[package]
+name = "streambed-logged-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+clap = { workspace = true }
+env_logger = { workspace = true }
+git-version = { workspace = true }
+humantime = { workspace = true }
+serde_json = { workspace = true }
+smol_str = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+
+streambed = { path = "../streambed" }
+streambed-logged = { path = "../streambed-logged" }
+
+[[bin]]
+name = "logged"
+path = "src/main.rs"
