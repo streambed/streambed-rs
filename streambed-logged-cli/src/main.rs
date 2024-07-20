@@ -64,7 +64,7 @@ struct SubscribeCommand {
     /// In the case where a subscription topic names are supplied, the consumer
     /// instance will subscribe and reply with a stream of records
     /// ending only when the connection to the topic is severed.
-    #[clap(env, long)]
+    #[clap(env, long, required = true)]
     pub subscription: Vec<String>,
 }
 
