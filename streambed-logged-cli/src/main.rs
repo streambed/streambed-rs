@@ -26,13 +26,13 @@ struct ProgramArgs {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    Append(AppendCommand),
-    Consume(ConsumeCommand),
+    Produce(ProduceCommand),
+    Subscribe(SubscribeCommand),
 }
 
 /// Consume JSON records from a stream until EOF and append them to the log.
 #[derive(Args, Debug)]
-struct AppendCommand {
+struct ProduceCommand {
     /// The file to consume records from, or `-` to indicate STDIN.
     #[clap(env, short, long)]
     pub file: PathBuf,
@@ -40,7 +40,7 @@ struct AppendCommand {
 
 /// Subscribe to topics and consume from them producing JSON records to a stream.
 #[derive(Args, Debug)]
-struct ConsumeCommand {
+struct SubscribeCommand {
     /// The amount of time to indicate that no more events are immediately
     /// available from the Commit Log endpoint. If unspecified then the
     /// CLI will wait indefinitely for records to appear.

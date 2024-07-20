@@ -8,7 +8,7 @@ Running with debug
 
 ```
 cargo run --bin logged -- \
-  consume --offset=my-topic,0,1000 --subscription=my-topic
+  subscribe --offset=my-topic,0,1000 --subscription=my-topic
 ```
 
 Use `--help` to discover all of the options.
@@ -21,5 +21,5 @@ To build and run the binary directory:
 ```
 cargo build --bin logged --release
 target/release/logged \
-  consume --offset=my-topic,0,1000 --subscription=my-topic
+  subscribe --offset=my-topic,0,1000 --subscription=my-topic
 ```
