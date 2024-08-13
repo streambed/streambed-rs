@@ -43,13 +43,13 @@ assert!(ss.get_secret("some.secret").await.unwrap().is_some());
 The primary functional use-cases of confidant are:
 
 * retrieve and store a user's secrets (user meaning operating system
-user); and
+  user); and
 * share secrets with other users.
 
 The primary operational use-cases of confidant are:
 
 * to be hosted by resource-constrained devices, typically with less
-than 128MiB memory and 8GB of storage.
+  than 128MiB memory and 8GB of storage.
 
 ## What is confidant?
 

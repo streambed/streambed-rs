@@ -6,6 +6,7 @@ members = [
     "streambed-confidant",
     "streambed-kafka",
     "streambed-logged",
+    "streambed-logged-cli",
     "streambed-patterns",
     "streambed-storage",
     "streambed-test",
@@ -15,7 +16,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.9.1" # WHEN CHANGING THIS, CHANGE THE "STREAMBED" DEPENDENCIES BELOW ALSO.
+version = "0.9.1"                                            # WHEN CHANGING THIS, CHANGE THE "STREAMBED" DEPENDENCIES BELOW ALSO.
 edition = "2021"
 rust-version = "1.70.0"
 license = "Apache-2.0"

@@ -58,7 +58,7 @@ The primary functional use-cases of logged are:
 The primary operational use-cases of logged are:
 
 * to be hosted by resource-constrained devices, typically with less
-than 128MiB memory and 8GB of storage.
+  than 128MiB memory and 8GB of storage.
 
 ## What is logged?
 
