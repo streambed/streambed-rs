@@ -12,6 +12,7 @@ cargo publish -p streambed-test
 cargo publish -p streambed-confidant
 cargo publish -p streambed-kafka
 cargo publish -p streambed-logged
+cargo publish -p streambed-logged-cli
 cargo publish -p streambed-patterns
 cargo publish -p streambed-storage
 cargo publish -p streambed-vault
