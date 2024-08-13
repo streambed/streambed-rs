@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "A CLI for a file-system-based commit log"
 
 [dependencies]
 clap = { workspace = true }
@@ -13,11 +14,10 @@ git-version = { workspace = true }
 humantime = { workspace = true }
 serde_json = { workspace = true }
 smol_str = { workspace = true }
+streambed = { workspace = true }
+streambed-logged = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
-
-streambed = { path = "../streambed" }
-streambed-logged = { path = "../streambed-logged" }
 
 [[bin]]
 name = "logged"

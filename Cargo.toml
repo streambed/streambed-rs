@@ -60,4 +60,5 @@ tokio-util = "0.7.4"
 warp = "0.3"
 
 streambed = { path = "streambed", version = "0.10.0" }
+streambed-logged = { path = "streambed-logged", version = "0.10.0" }
 streambed-test = { path = "streambed-test", version = "0.10.0" }
