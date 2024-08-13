@@ -7,7 +7,6 @@ use std::{
 
 use clap::{Args, Parser, Subcommand};
 use errors::Errors;
-use git_version::git_version;
 use streambed::commit_log::{ConsumerOffset, Subscription};
 use streambed_logged::FileLog;
 
@@ -22,7 +21,7 @@ pub mod subscriber;
 /// value (payload), or whether it is encrypted or not. The expectation
 /// is that a separate tool for that concern is used in a pipeline.
 #[derive(Parser, Debug)]
-#[clap(author, about, long_about = None, version = git_version ! ())]
+#[clap(author, about, long_about = None, version)]
 struct ProgramArgs {
     /// The location of all topics in the Commit Log
     #[clap(env, long, default_value = "/var/lib/logged")]

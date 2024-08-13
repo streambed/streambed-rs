@@ -1,7 +1,6 @@
 use std::{error::Error, net::SocketAddr};
 
 use clap::Parser;
-use git_version::git_version;
 use log::info;
 use streambed_logged::{args::CommitLogArgs, FileLog};
 use tokio::{net::UdpSocket, sync::mpsc};
@@ -14,7 +13,7 @@ mod udp_server;
 /// commit log keyed by its sensor id, and provides an HTTP interface
 /// to access it.
 #[derive(Parser, Debug)]
-#[clap(author, about, long_about = None, version = git_version ! ())]
+#[clap(author, about, long_about = None, version)]
 struct Args {
     /// Logged commit log args
     #[clap(flatten)]

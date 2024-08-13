@@ -1,14 +1,13 @@
 use std::error::Error;
 
 use clap::Parser;
-use git_version::git_version;
 use log::info;
 use streambed::secret_store::SecretStore;
 use streambed_vault::{args::SsArgs, VaultSecretStore};
 
 /// Service CLI that brings in the args we need for configuring access to a secret store
 #[derive(Parser, Debug)]
-#[clap(author, about, long_about = None, version=git_version!())]
+#[clap(author, about, long_about = None, version)]
 struct Args {
     #[clap(flatten)]
     ss_args: SsArgs,

@@ -23,7 +23,6 @@ tokio = { workspace = true, features = [ "fs", "io-util" ] }
 
 [dev-dependencies]
 env_logger = { workspace = true }
-git-version = { workspace = true }
 hex = { workspace = true }
 log = { workspace = true }
 test-log = { workspace = true }
