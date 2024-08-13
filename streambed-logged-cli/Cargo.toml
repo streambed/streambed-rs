@@ -16,7 +16,7 @@ serde_json = { workspace = true }
 smol_str = { workspace = true }
 streambed = { workspace = true }
 streambed-logged = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
 
 [[bin]]

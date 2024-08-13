@@ -10,8 +10,6 @@ description = "Streambed core library components"
 [dependencies]
 aes = { workspace = true }
 async-trait = { workspace = true }
-base64 = { workspace = true }
-cache_loader_async = { workspace = true, features = ["lru-cache", "ttl-cache"] }
 chrono = { workspace = true, features = ["serde"] }
 exponential-backoff = { workspace = true }
 hex = { workspace = true }
@@ -23,13 +21,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["base64"] }
 sha2 = { workspace = true }
 smol_str = { workspace = true, features = ["serde"] }
-tokio = { workspace = true, features = [
-    "sync",
-    "macros",
-    "io-util",
-    "rt",
-    "time",
-] }
+tokio = { workspace = true, features = [ "macros", "rt" ] }
 tokio-stream = { workspace = true }
 
 [dev-dependencies]

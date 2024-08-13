@@ -9,10 +9,8 @@ description = "Patterns for working with streambed"
 
 [dependencies]
 async-trait = { workspace = true }
-tokio = { workspace = true, features = [
-    "sync",
-    "macros",
-    "io-util",
-    "rt",
-    "time",
-] }
+tokio = { workspace = true, features = [ "sync" ] }
+
+[dev-dependencies.tokio]
+workspace = true
+features = [ "full" ]

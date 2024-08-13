@@ -17,13 +17,7 @@ log = { workspace = true }
 postcard = { workspace = true, default-features = false, features = ["use-std"] }
 scopeguard = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-tokio = { workspace = true, features = [
-    "sync",
-    "macros",
-    "io-util",
-    "rt",
-    "time",
-] }
+tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["codec"] }
 warp = { workspace = true }
