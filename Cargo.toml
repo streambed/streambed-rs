@@ -4,6 +4,7 @@ resolver = "2"
 members = [
     "streambed",
     "streambed-confidant",
+    "streambed-confidant-cli",
     "streambed-kafka",
     "streambed-logged",
     "streambed-logged-cli",
@@ -59,5 +60,6 @@ tokio-util = "0.7.4"
 warp = "0.3"
 
 streambed = { path = "streambed", version = "0.10.2" }
+streambed-confidant = { path = "streambed-confidant", version = "0.10.2" }
 streambed-logged = { path = "streambed-logged", version = "0.10.2" }
 streambed-test = { path = "streambed-test", version = "0.10.2" }

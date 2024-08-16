@@ -1,0 +1,25 @@
+[package]
+name = "streambed-confidant-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A CLI for a file-system-based secret store that applies streambed-crypto to data"
+
+[dependencies]
+base64 = { workspace = true }
+clap = { workspace = true }
+env_logger = { workspace = true }
+hex = { workspace = true }
+humantime = { workspace = true }
+rand = { workspace = true }
+serde_json = { workspace = true }
+streambed = { workspace = true }
+streambed-confidant = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tokio-stream = { workspace = true }
+
+[[bin]]
+name = "confidant"
+path = "src/main.rs"
