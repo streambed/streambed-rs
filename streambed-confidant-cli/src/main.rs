@@ -2,7 +2,7 @@ use std::{
     error::Error,
     fs::{self, File},
     io::{self, BufRead, BufReader, BufWriter, Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
@@ -26,8 +26,9 @@ struct ProgramArgs {
     /// In order to initialise the secret store, a root secret is also required. A credentials-directory path can be provided
     /// where a `root-secret`` file is expected. This argument corresponds conveniently with systemd's CREDENTIALS_DIRECTORY
     /// environment variable and is used by various services we have written.
-    /// Also associated with this argument is the `secret_id` file` for role-based authentication with the secret store.
-    /// This secret is expected to be found in a ss-secret-id file of the directory.
+    /// Also associated with this argument is an optional "secret id" file` for role-based authentication with the secret store.
+    /// This secret is expected to be found in a ss-secret-id file of the directory and, if not provided, will default to
+    /// an "unusedid" value.
     #[clap(env, long, default_value = "/tmp")]
     pub credentials_directory: PathBuf,
 
@@ -145,14 +146,17 @@ async fn secret_store(
                 .ok_or(Errors::EmptyRootSecretFile)?
                 .map_err(Errors::RootSecretFileIo)?;
 
-            let f = File::open(credentials_directory.join("ss-secret-id"))
-                .map_err(Errors::SecretIdFileIo)?;
-            let f = BufReader::new(f);
-            let ss_secret_id = f
-                .lines()
-                .next()
-                .ok_or(Errors::EmptyRootSecretFile)?
-                .map_err(Errors::SecretIdFileIo)?;
+            let ss_secret_id = if Path::exists(&credentials_directory.join("ss-secret-id")) {
+                let f = File::open(credentials_directory.join("ss-secret-id"))
+                    .map_err(Errors::SecretIdFileIo)?;
+                let f = BufReader::new(f);
+                f.lines()
+                    .next()
+                    .ok_or(Errors::EmptyRootSecretFile)?
+                    .map_err(Errors::SecretIdFileIo)?
+            } else {
+                String::from("unusedid")
+            };
 
             (root_secret, ss_secret_id)
         };

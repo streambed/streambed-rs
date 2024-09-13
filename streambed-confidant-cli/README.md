@@ -32,7 +32,6 @@ to authenticate the session. Here's an example with some dummy data:
 
 ```
 echo "1800af9b273e4b9ea71ec723426933a4" > /tmp/root-secret
-echo "unused-id" > /tmp/ss-secret-id
 ```
 
 We also need to create a directory for `confidant` to read and write its secrets. A security feature
