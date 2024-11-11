@@ -6,11 +6,6 @@ use clap::Parser;
 
 #[derive(Parser, Debug)]
 pub struct CommitLogArgs {
-    /// The amount of time to indicate that no more events are immediately
-    /// available from the Commit Log endpoint
-    #[clap(env, long, default_value = "100ms")]
-    pub cl_idle_timeout: humantime::Duration,
-
     /// A namespace to use when communicating with the Commit Log
     #[clap(env, long, default_value = "default")]
     pub cl_ns: String,

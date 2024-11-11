@@ -14,7 +14,6 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 crc = { workspace = true }
-humantime = { workspace = true }
 log = { workspace = true }
 postcard = { workspace = true, default-features = false, features = ["use-std", "use-crc"] }
 serde = { workspace = true, features = ["derive"] }
