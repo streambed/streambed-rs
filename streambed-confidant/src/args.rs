@@ -6,7 +6,7 @@ use clap::Parser;
 
 #[derive(Parser, Debug)]
 pub struct SsArgs {
-    /// The max number of Vault Secret Store secrets to retain by our cache at any time.
+    /// The max number of Secret Store secrets to retain by our cache at any time.
     /// Least Recently Used (LRU) secrets will be evicted from our cache once this value
     /// is exceeded.
     #[clap(env, long, default_value_t = 10_000)]
