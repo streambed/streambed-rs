@@ -31,14 +31,12 @@ pub trait CompactionStrategy {
     type KS: Debug + Send + Clone;
 
     /// Produce the initial key state for the compaction.
-    fn key_state_init(&self) -> Self::KS;
+    fn key_init(&self) -> Self::KS;
 
     /// The key function computes a key that will be used by the compactor for
     /// subsequent use. In simple scenarios, this key can be the key field from
     /// the topic's record itself, which is the default assumption here.
-    fn key(_key_state: &mut Self::KS, r: &ConsumerRecord) -> Key {
-        r.key
-    }
+    fn key(key_state: &mut Self::KS, r: &ConsumerRecord) -> Key;
 
     /// Produce the initial state for the reducer function.
     async fn init(&self) -> Self::S;
@@ -67,6 +65,7 @@ pub trait CompactionStrategy {
 ///
 /// KeyBasedRetention is guaranteed to return a key that is the record's key.
 pub struct KeyBasedRetention {
+    id_from_record: Option<fn(&ConsumerRecord) -> String>,
     max_compaction_keys: usize,
 }
 
@@ -75,6 +74,20 @@ impl KeyBasedRetention {
     /// processed in a single run of the compactor.
     pub fn new(max_compaction_keys: usize) -> Self {
         Self {
+            id_from_record: None,
+            max_compaction_keys,
+        }
+    }
+
+    /// Similar to the above, but the id of a record will be determined by a function.
+    /// A max_compaction_keys parameter is used to limit the number of distinct topic/partition/keys
+    /// processed in a single run of the compactor.
+    pub fn with_string_ids(
+        id_from_record: fn(&ConsumerRecord) -> String,
+        max_compaction_keys: usize,
+    ) -> Self {
+        Self {
+            id_from_record: Some(id_from_record),
             max_compaction_keys,
         }
     }
@@ -86,9 +99,31 @@ pub type KeyBasedRetentionState = (CompactionMap, usize);
 #[async_trait]
 impl CompactionStrategy for KeyBasedRetention {
     type S = KeyBasedRetentionState;
-    type KS = ();
+    type KS = Option<(HashMap<String, Key>, fn(&ConsumerRecord) -> String)>;
 
-    fn key_state_init(&self) -> Self::KS {}
+    fn key_init(&self) -> Self::KS {
+        self.id_from_record.map(|id_from_record| {
+            (
+                HashMap::with_capacity(self.max_compaction_keys),
+                id_from_record,
+            )
+        })
+    }
+
+    fn key(key_state: &mut Self::KS, r: &ConsumerRecord) -> Key {
+        if let Some((key_map, id_from_record)) = key_state {
+            let id = (id_from_record)(r);
+            if let Some(key) = key_map.get(id.as_str()) {
+                *key
+            } else {
+                let key = key_map.len() as Key;
+                let _ = key_map.insert(id, key);
+                key
+            }
+        } else {
+            r.key
+        }
+    }
 
     async fn init(&self) -> Self::S {
         (
@@ -123,6 +158,7 @@ impl CompactionStrategy for KeyBasedRetention {
 /// Similar to [KeyBasedRetention], but instead of retaining the latest offset for a key. this strategy retains
 /// the oldest nth offset associated with a key.
 pub struct NthKeyBasedRetention {
+    id_from_record: Option<fn(&ConsumerRecord) -> String>,
     max_compaction_keys: usize,
     max_records_per_key: usize,
 }
@@ -133,6 +169,23 @@ impl NthKeyBasedRetention {
     /// nth oldest key.
     pub fn new(max_compaction_keys: usize, max_records_per_key: usize) -> Self {
         Self {
+            id_from_record: None,
+            max_compaction_keys,
+            max_records_per_key,
+        }
+    }
+
+    /// Similar to the above, but the id of a record will be determined by a function.
+    /// A max_compaction_keys parameter is used to limit the number of distinct topic/partition/keys
+    /// processed in a single run of the compactor. The max_records_per_key is used to retain the
+    /// nth oldest key.
+    pub fn with_string_ids(
+        id_from_record: fn(&ConsumerRecord) -> String,
+        max_compaction_keys: usize,
+        max_records_per_key: usize,
+    ) -> Self {
+        Self {
+            id_from_record: Some(id_from_record),
             max_compaction_keys,
             max_records_per_key,
         }
@@ -145,9 +198,31 @@ pub type NthKeyBasedRetentionState = (HashMap<Key, VecDeque<Offset>>, usize, usi
 #[async_trait]
 impl CompactionStrategy for NthKeyBasedRetention {
     type S = NthKeyBasedRetentionState;
-    type KS = ();
+    type KS = Option<(HashMap<String, Key>, fn(&ConsumerRecord) -> String)>;
 
-    fn key_state_init(&self) -> Self::KS {}
+    fn key_init(&self) -> Self::KS {
+        self.id_from_record.map(|id_from_record| {
+            (
+                HashMap::with_capacity(self.max_compaction_keys),
+                id_from_record,
+            )
+        })
+    }
+
+    fn key(key_state: &mut Self::KS, r: &ConsumerRecord) -> Key {
+        if let Some((key_map, id_from_record)) = key_state {
+            let id = (id_from_record)(r);
+            if let Some(key) = key_map.get(id.as_str()) {
+                *key
+            } else {
+                let key = key_map.len() as Key;
+                let _ = key_map.insert(id, key);
+                key
+            }
+        } else {
+            r.key
+        }
+    }
 
     async fn init(&self) -> Self::S {
         (
@@ -420,7 +495,7 @@ where
                     if let Ok(Some(end_offset)) = r {
                         let task_scoped_topic_subscriber = self.scoped_topic_subscriber.clone();
                         let task_init = self.compaction_strategy.init().await;
-                        let task_key_state_init = self.compaction_strategy.key_state_init();
+                        let task_key_state_init = self.compaction_strategy.key_init();
                         let h = tokio::spawn(async move {
                             let mut strategy_state = task_init;
                             let mut key_state = task_key_state_init;
@@ -623,20 +698,21 @@ mod tests {
 
         let compaction = KeyBasedRetention::new(1);
 
+        let mut key_state = compaction.key_init();
         let mut state = compaction.init().await;
 
         assert_eq!(
-            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&mut (), &r0), r0),
+            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&mut key_state, &r0), r0),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&mut (), &r1), r1),
+            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&mut key_state, &r1), r1),
             MaxKeysReached(true),
         );
 
         assert_eq!(
-            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&mut (), &r2), r2),
+            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&mut key_state, &r2), r2),
             MaxKeysReached(false)
         );
 
@@ -692,25 +768,42 @@ mod tests {
 
         let compaction = NthKeyBasedRetention::new(1, 2);
 
+        let mut key_state = compaction.key_init();
         let mut state = compaction.init().await;
 
         assert_eq!(
-            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&mut (), &r0), r0),
+            NthKeyBasedRetention::reduce(
+                &mut state,
+                NthKeyBasedRetention::key(&mut key_state, &r0),
+                r0
+            ),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&mut (), &r1), r1),
+            NthKeyBasedRetention::reduce(
+                &mut state,
+                NthKeyBasedRetention::key(&mut key_state, &r1),
+                r1
+            ),
             MaxKeysReached(true),
         );
 
         assert_eq!(
-            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&mut (), &r2), r2),
+            NthKeyBasedRetention::reduce(
+                &mut state,
+                NthKeyBasedRetention::key(&mut key_state, &r2),
+                r2
+            ),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&mut (), &r3), r3),
+            NthKeyBasedRetention::reduce(
+                &mut state,
+                NthKeyBasedRetention::key(&mut key_state, &r3),
+                r3
+            ),
             MaxKeysReached(false)
         );
 
@@ -823,7 +916,11 @@ mod tests {
         type S = TemperatureSensorCompactionState;
         type KS = ();
 
-        fn key_state_init(&self) -> Self::KS {}
+        fn key_init(&self) -> Self::KS {}
+
+        fn key(_key_state: &mut Self::KS, r: &ConsumerRecord) -> Key {
+            r.key
+        }
 
         async fn init(&self) -> TemperatureSensorCompactionState {
             TemperatureSensorCompactionState {
@@ -1020,7 +1117,11 @@ mod tests {
         type S = CompactionMap;
         type KS = ();
 
-        fn key_state_init(&self) -> Self::KS {}
+        fn key_init(&self) -> Self::KS {}
+
+        fn key(_key_state: &mut Self::KS, r: &ConsumerRecord) -> Key {
+            r.key
+        }
 
         async fn init(&self) -> Self::S {
             CompactionMap::new()
