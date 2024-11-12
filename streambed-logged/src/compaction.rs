@@ -3,6 +3,7 @@ use std::{error::Error, fmt::Debug};
 use super::*;
 
 use log::{debug, error};
+use smol_str::SmolStr;
 use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
 
@@ -26,19 +27,18 @@ pub trait CompactionStrategy {
     /// The state to manage throughout a compaction run.
     type S: Debug + Send;
 
+    /// The type of state required to manage keys. It may be that no state is
+    /// required i.e. if the key field from the record is used.
+    type KS: Debug + Send + Clone;
+
+    /// Produce the initial key state for the compaction.
+    fn key_init(&self) -> Self::KS;
+
     /// The key function computes a key that will be used by the compactor for
     /// subsequent use. In simple scenarios, this key can be the key field from
-    /// the topic's record itself.
-    ///
-    /// BEWARE!!! It is good practice to encrypt the record's data. Having a key
-    /// constructed from record data will expose it to being unencrypted. If this
-    /// is a problem then override this method to decrypt and the record data
-    /// each time the [Self::reduce] function is called. The advantage though of
-    /// simply using the record's key directly is speed as we can avoid a
-    /// decryption stage.
-    fn key(r: &ConsumerRecord) -> Key {
-        r.key
-    }
+    /// the topic's record itself, which is the default assumption here.
+    /// Returning None will result in this record being excluded from compaction.
+    fn key(key_state: &mut Self::KS, r: &ConsumerRecord) -> Option<Key>;
 
     /// Produce the initial state for the reducer function.
     async fn init(&self) -> Self::S;
@@ -61,6 +61,10 @@ pub trait CompactionStrategy {
     fn collect(state: Self::S) -> CompactionMap;
 }
 
+/// A qualified id is a string that identifies a type of a record and some key derived from the record e.g.
+/// a an entity and a primary key of the entity.
+pub type Qid = SmolStr;
+
 /// The goal of key-based retention is to keep the latest record for a given
 /// key within a topic. This is the same as Kafka's key-based retention and
 /// effectively makes the commit log a key value store.
@@ -68,6 +72,7 @@ pub trait CompactionStrategy {
 /// KeyBasedRetention is guaranteed to return a key that is the record's key.
 pub struct KeyBasedRetention {
     max_compaction_keys: usize,
+    qid_from_record: Option<fn(&ConsumerRecord) -> Option<Qid>>,
 }
 
 impl KeyBasedRetention {
@@ -75,6 +80,20 @@ impl KeyBasedRetention {
     /// processed in a single run of the compactor.
     pub fn new(max_compaction_keys: usize) -> Self {
         Self {
+            qid_from_record: None,
+            max_compaction_keys,
+        }
+    }
+
+    /// Similar to the above, but the qualified id of a record will be determined by a function.
+    /// A max_compaction_keys parameter is used to limit the number of distinct topic/partition/keys
+    /// processed in a single run of the compactor.
+    pub fn with_qids(
+        qid_from_record: fn(&ConsumerRecord) -> Option<Qid>,
+        max_compaction_keys: usize,
+    ) -> Self {
+        Self {
+            qid_from_record: Some(qid_from_record),
             max_compaction_keys,
         }
     }
@@ -86,19 +105,40 @@ pub type KeyBasedRetentionState = (CompactionMap, usize);
 #[async_trait]
 impl CompactionStrategy for KeyBasedRetention {
     type S = KeyBasedRetentionState;
+    type KS = Option<(HashMap<Qid, Key>, fn(&ConsumerRecord) -> Option<Qid>)>;
 
-    async fn init(&self) -> KeyBasedRetentionState {
+    fn key_init(&self) -> Self::KS {
+        self.qid_from_record.map(|id_from_record| {
+            (
+                HashMap::with_capacity(self.max_compaction_keys),
+                id_from_record,
+            )
+        })
+    }
+
+    fn key(key_state: &mut Self::KS, r: &ConsumerRecord) -> Option<Key> {
+        if let Some((key_map, id_from_record)) = key_state {
+            let id = (id_from_record)(r)?;
+            if let Some(key) = key_map.get(id.as_str()) {
+                Some(*key)
+            } else {
+                let key = key_map.len() as Key;
+                let _ = key_map.insert(id, key);
+                Some(key)
+            }
+        } else {
+            Some(r.key)
+        }
+    }
+
+    async fn init(&self) -> Self::S {
         (
             CompactionMap::with_capacity(self.max_compaction_keys),
             self.max_compaction_keys,
         )
     }
 
-    fn reduce(
-        state: &mut KeyBasedRetentionState,
-        key: Key,
-        record: ConsumerRecord,
-    ) -> MaxKeysReached {
+    fn reduce(state: &mut Self::S, key: Key, record: ConsumerRecord) -> MaxKeysReached {
         let (compaction_map, max_keys) = state;
 
         let l = compaction_map.len();
@@ -115,7 +155,7 @@ impl CompactionStrategy for KeyBasedRetention {
         }
     }
 
-    fn collect(state: KeyBasedRetentionState) -> CompactionMap {
+    fn collect(state: Self::S) -> CompactionMap {
         let (compaction_map, _) = state;
         compaction_map
     }
@@ -126,6 +166,7 @@ impl CompactionStrategy for KeyBasedRetention {
 pub struct NthKeyBasedRetention {
     max_compaction_keys: usize,
     max_records_per_key: usize,
+    qid_from_record: Option<fn(&ConsumerRecord) -> Option<Qid>>,
 }
 
 impl NthKeyBasedRetention {
@@ -134,6 +175,23 @@ impl NthKeyBasedRetention {
     /// nth oldest key.
     pub fn new(max_compaction_keys: usize, max_records_per_key: usize) -> Self {
         Self {
+            max_compaction_keys,
+            max_records_per_key,
+            qid_from_record: None,
+        }
+    }
+
+    /// Similar to the above, but the qualified id of a record will be determined by a function.
+    /// A max_compaction_keys parameter is used to limit the number of distinct topic/partition/keys
+    /// processed in a single run of the compactor. The max_records_per_key is used to retain the
+    /// nth oldest key.
+    pub fn with_qids(
+        max_compaction_keys: usize,
+        max_records_per_key: usize,
+        qid_from_record: fn(&ConsumerRecord) -> Option<Qid>,
+    ) -> Self {
+        Self {
+            qid_from_record: Some(qid_from_record),
             max_compaction_keys,
             max_records_per_key,
         }
@@ -146,8 +204,33 @@ pub type NthKeyBasedRetentionState = (HashMap<Key, VecDeque<Offset>>, usize, usi
 #[async_trait]
 impl CompactionStrategy for NthKeyBasedRetention {
     type S = NthKeyBasedRetentionState;
+    type KS = Option<(HashMap<Qid, Key>, fn(&ConsumerRecord) -> Option<Qid>)>;
 
-    async fn init(&self) -> NthKeyBasedRetentionState {
+    fn key_init(&self) -> Self::KS {
+        self.qid_from_record.map(|id_from_record| {
+            (
+                HashMap::with_capacity(self.max_compaction_keys),
+                id_from_record,
+            )
+        })
+    }
+
+    fn key(key_state: &mut Self::KS, r: &ConsumerRecord) -> Option<Key> {
+        if let Some((key_map, id_from_record)) = key_state {
+            let id = (id_from_record)(r)?;
+            if let Some(key) = key_map.get(id.as_str()) {
+                Some(*key)
+            } else {
+                let key = key_map.len() as Key;
+                let _ = key_map.insert(id, key);
+                Some(key)
+            }
+        } else {
+            Some(r.key)
+        }
+    }
+
+    async fn init(&self) -> Self::S {
         (
             HashMap::with_capacity(self.max_compaction_keys),
             self.max_compaction_keys,
@@ -155,11 +238,7 @@ impl CompactionStrategy for NthKeyBasedRetention {
         )
     }
 
-    fn reduce(
-        state: &mut NthKeyBasedRetentionState,
-        key: Key,
-        record: ConsumerRecord,
-    ) -> MaxKeysReached {
+    fn reduce(state: &mut Self::S, key: Key, record: ConsumerRecord) -> MaxKeysReached {
         let (compaction_map, max_keys, max_records_per_key) = state;
 
         let l = compaction_map.len();
@@ -182,7 +261,7 @@ impl CompactionStrategy for NthKeyBasedRetention {
         }
     }
 
-    fn collect(state: NthKeyBasedRetentionState) -> CompactionMap {
+    fn collect(state: Self::S) -> CompactionMap {
         let (compaction_map, _, _) = state;
         compaction_map
             .into_iter()
@@ -352,8 +431,8 @@ where
 {
     Idle,
     PreparingAnalyze(Option<Offset>),
-    Analyzing(JoinHandle<(CS::S, Option<Offset>)>, Offset),
-    PreparingCompaction(CompactionMap, Offset, Option<Offset>),
+    Analyzing(JoinHandle<(CS::KS, CS::S, Option<Offset>)>, Offset),
+    PreparingCompaction(CS::KS, CompactionMap, Offset, Option<Offset>),
     Compacting(JoinHandle<Result<(), CompactionError>>, Option<Offset>),
 }
 
@@ -368,11 +447,12 @@ where
             Self::Analyzing(arg0, arg1) => {
                 f.debug_tuple("Analyzing").field(arg0).field(arg1).finish()
             }
-            Self::PreparingCompaction(arg0, arg1, arg2) => f
+            Self::PreparingCompaction(arg0, arg1, arg2, arg3) => f
                 .debug_tuple("PreparingCompaction")
                 .field(arg0)
                 .field(arg1)
                 .field(arg2)
+                .field(arg3)
                 .finish(),
             Self::Compacting(arg0, arg1) => {
                 f.debug_tuple("Compacting").field(arg0).field(arg1).finish()
@@ -421,8 +501,10 @@ where
                     if let Ok(Some(end_offset)) = r {
                         let task_scoped_topic_subscriber = self.scoped_topic_subscriber.clone();
                         let task_init = self.compaction_strategy.init().await;
+                        let task_key_state_init = self.compaction_strategy.key_init();
                         let h = tokio::spawn(async move {
                             let mut strategy_state = task_init;
+                            let mut key_state = task_key_state_init;
                             let mut records = task_scoped_topic_subscriber.subscribe();
                             let start_offset = next_start_offset;
                             next_start_offset = None;
@@ -431,17 +513,19 @@ where
                                 if record_offset > end_offset {
                                     break;
                                 }
-                                if Some(record_offset) >= start_offset
-                                    && matches!(
-                                        CS::reduce(&mut strategy_state, CS::key(&record), record),
-                                        MaxKeysReached(true)
-                                    )
-                                    && next_start_offset.is_none()
-                                {
-                                    next_start_offset = Some(record_offset);
+                                if Some(record_offset) >= start_offset {
+                                    if let Some(key) = CS::key(&mut key_state, &record) {
+                                        if matches!(
+                                            CS::reduce(&mut strategy_state, key, record),
+                                            MaxKeysReached(true)
+                                        ) && next_start_offset.is_none()
+                                        {
+                                            next_start_offset = Some(record_offset);
+                                        }
+                                    }
                                 }
                             }
-                            (strategy_state, next_start_offset)
+                            (key_state, strategy_state, next_start_offset)
                         });
                         step_again = true;
                         Some(State::Analyzing(h, end_offset))
@@ -454,9 +538,10 @@ where
                     step_again = active_file_size >= self.compaction_threshold;
                     if step_again || h.is_finished() {
                         let r = h.await;
-                        let s = if let Ok((strategy_state, next_start_offset)) = r {
+                        let s = if let Ok((key_state, strategy_state, next_start_offset)) = r {
                             let compaction_map = CS::collect(strategy_state);
                             State::PreparingCompaction(
+                                key_state,
                                 compaction_map,
                                 *end_offset,
                                 next_start_offset,
@@ -470,9 +555,15 @@ where
                         None
                     }
                 }
-                State::PreparingCompaction(compaction_map, end_offset, next_start_offset) => {
+                State::PreparingCompaction(
+                    key_state,
+                    compaction_map,
+                    end_offset,
+                    next_start_offset,
+                ) => {
                     let r = self.topic_storage_ops.new_work_writer();
                     if let Ok(mut writer) = r {
+                        let mut task_key_state = key_state.clone();
                         let task_compaction_map = compaction_map.clone();
                         let task_end_offset = *end_offset;
                         let task_scoped_topic_subscriber = self.scoped_topic_subscriber.clone();
@@ -482,12 +573,15 @@ where
                                 if record.offset > task_end_offset {
                                     break;
                                 }
-                                let key = CS::key(&record);
-                                let copy = task_compaction_map
-                                    .get(&key)
-                                    .map(|min_offset| record.offset >= *min_offset)
-                                    .unwrap_or(true);
-
+                                let key = CS::key(&mut task_key_state, &record);
+                                let copy = if let Some(key) = key {
+                                    task_compaction_map
+                                        .get(&key)
+                                        .map(|min_offset| record.offset >= *min_offset)
+                                        .unwrap_or(true)
+                                } else {
+                                    false
+                                };
                                 if copy {
                                     let storable_record = StorableRecord {
                                         version: 0,
@@ -611,20 +705,33 @@ mod tests {
 
         let compaction = KeyBasedRetention::new(1);
 
+        let mut key_state = compaction.key_init();
         let mut state = compaction.init().await;
 
         assert_eq!(
-            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&r0), r0),
+            KeyBasedRetention::reduce(
+                &mut state,
+                KeyBasedRetention::key(&mut key_state, &r0).unwrap(),
+                r0
+            ),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&r1), r1),
+            KeyBasedRetention::reduce(
+                &mut state,
+                KeyBasedRetention::key(&mut key_state, &r1).unwrap(),
+                r1
+            ),
             MaxKeysReached(true),
         );
 
         assert_eq!(
-            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&r2), r2),
+            KeyBasedRetention::reduce(
+                &mut state,
+                KeyBasedRetention::key(&mut key_state, &r2).unwrap(),
+                r2
+            ),
             MaxKeysReached(false)
         );
 
@@ -680,25 +787,42 @@ mod tests {
 
         let compaction = NthKeyBasedRetention::new(1, 2);
 
+        let mut key_state = compaction.key_init();
         let mut state = compaction.init().await;
 
         assert_eq!(
-            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&r0), r0),
+            NthKeyBasedRetention::reduce(
+                &mut state,
+                NthKeyBasedRetention::key(&mut key_state, &r0).unwrap(),
+                r0
+            ),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&r1), r1),
+            NthKeyBasedRetention::reduce(
+                &mut state,
+                NthKeyBasedRetention::key(&mut key_state, &r1).unwrap(),
+                r1
+            ),
             MaxKeysReached(true),
         );
 
         assert_eq!(
-            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&r2), r2),
+            NthKeyBasedRetention::reduce(
+                &mut state,
+                NthKeyBasedRetention::key(&mut key_state, &r2).unwrap(),
+                r2
+            ),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&r3), r3),
+            NthKeyBasedRetention::reduce(
+                &mut state,
+                NthKeyBasedRetention::key(&mut key_state, &r3).unwrap(),
+                r3
+            ),
             MaxKeysReached(false)
         );
 
@@ -809,6 +933,13 @@ mod tests {
     #[async_trait]
     impl CompactionStrategy for TemperatureSensorTopic {
         type S = TemperatureSensorCompactionState;
+        type KS = ();
+
+        fn key_init(&self) -> Self::KS {}
+
+        fn key(_key_state: &mut Self::KS, r: &ConsumerRecord) -> Option<Key> {
+            Some(r.key)
+        }
 
         async fn init(&self) -> TemperatureSensorCompactionState {
             TemperatureSensorCompactionState {
@@ -914,28 +1045,107 @@ mod tests {
         let mut state = compaction.init().await;
 
         assert_eq!(
-            TemperatureSensorTopic::reduce(&mut state, TemperatureSensorTopic::key(&r0), r0),
+            TemperatureSensorTopic::reduce(
+                &mut state,
+                TemperatureSensorTopic::key(&mut (), &r0).unwrap(),
+                r0
+            ),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            TemperatureSensorTopic::reduce(&mut state, TemperatureSensorTopic::key(&r1), r1),
+            TemperatureSensorTopic::reduce(
+                &mut state,
+                TemperatureSensorTopic::key(&mut (), &r1).unwrap(),
+                r1
+            ),
             MaxKeysReached(false),
         );
 
         assert_eq!(
-            TemperatureSensorTopic::reduce(&mut state, TemperatureSensorTopic::key(&r2), r2),
+            TemperatureSensorTopic::reduce(
+                &mut state,
+                TemperatureSensorTopic::key(&mut (), &r2).unwrap(),
+                r2
+            ),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            TemperatureSensorTopic::reduce(&mut state, TemperatureSensorTopic::key(&r3), r3),
+            TemperatureSensorTopic::reduce(
+                &mut state,
+                TemperatureSensorTopic::key(&mut (), &r3).unwrap(),
+                r3
+            ),
             MaxKeysReached(false)
         );
 
         assert_eq!(
             TemperatureSensorTopic::collect(state),
             expected_compactor_result
+        );
+    }
+
+    #[tokio::test]
+    async fn test_key_state() {
+        let compaction = KeyBasedRetention::with_qids(
+            |r| std::str::from_utf8(&r.value).map(|s| s.into()).ok(),
+            2,
+        );
+
+        let mut key_state = compaction.key_init();
+
+        assert_eq!(
+            KeyBasedRetention::key(
+                &mut key_state,
+                &ConsumerRecord {
+                    topic: "some-topic".into(),
+                    headers: vec![],
+                    timestamp: None,
+                    key: 0,
+                    value: "some-key".as_bytes().to_vec(),
+                    partition: 0,
+                    offset: 10,
+                },
+            ),
+            Some(0)
+        );
+
+        assert_eq!(
+            KeyBasedRetention::key(
+                &mut key_state,
+                &ConsumerRecord {
+                    topic: "some-topic".into(),
+                    headers: vec![],
+                    timestamp: None,
+                    key: 0,
+                    value: "some-key".as_bytes().to_vec(),
+                    partition: 0,
+                    offset: 10,
+                },
+            ),
+            Some(0)
+        );
+
+        assert_eq!(
+            KeyBasedRetention::key(
+                &mut key_state,
+                &ConsumerRecord {
+                    topic: "some-topic".into(),
+                    headers: vec![],
+                    timestamp: None,
+                    key: 0,
+                    value: "some-other-key".as_bytes().to_vec(),
+                    partition: 0,
+                    offset: 10,
+                },
+            ),
+            Some(1)
+        );
+
+        assert_eq!(
+            key_state.unwrap().0,
+            HashMap::from([("some-key".into(), 0), ("some-other-key".into(), 1)])
         );
     }
 
@@ -987,6 +1197,13 @@ mod tests {
     #[async_trait]
     impl CompactionStrategy for TestCompactionStrategy {
         type S = CompactionMap;
+        type KS = ();
+
+        fn key_init(&self) -> Self::KS {}
+
+        fn key(_key_state: &mut Self::KS, r: &ConsumerRecord) -> Option<Key> {
+            Some(r.key)
+        }
 
         async fn init(&self) -> Self::S {
             CompactionMap::new()
