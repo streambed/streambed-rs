@@ -26,17 +26,17 @@ pub trait CompactionStrategy {
     /// The state to manage throughout a compaction run.
     type S: Debug + Send;
 
+    /// The type of state required to manage keys. It may be that no state is
+    /// required i.e. if the key field from the record is used.
+    type KS: Debug + Send + Clone;
+
+    /// Produce the initial key state for the compaction.
+    fn key_state_init(&self) -> Self::KS;
+
     /// The key function computes a key that will be used by the compactor for
     /// subsequent use. In simple scenarios, this key can be the key field from
-    /// the topic's record itself.
-    ///
-    /// BEWARE!!! It is good practice to encrypt the record's data. Having a key
-    /// constructed from record data will expose it to being unencrypted. If this
-    /// is a problem then override this method to decrypt and the record data
-    /// each time the [Self::reduce] function is called. The advantage though of
-    /// simply using the record's key directly is speed as we can avoid a
-    /// decryption stage.
-    fn key(r: &ConsumerRecord) -> Key {
+    /// the topic's record itself, which is the default assumption here.
+    fn key(_key_state: &mut Self::KS, r: &ConsumerRecord) -> Key {
         r.key
     }
 
@@ -86,19 +86,18 @@ pub type KeyBasedRetentionState = (CompactionMap, usize);
 #[async_trait]
 impl CompactionStrategy for KeyBasedRetention {
     type S = KeyBasedRetentionState;
+    type KS = ();
 
-    async fn init(&self) -> KeyBasedRetentionState {
+    fn key_state_init(&self) -> Self::KS {}
+
+    async fn init(&self) -> Self::S {
         (
             CompactionMap::with_capacity(self.max_compaction_keys),
             self.max_compaction_keys,
         )
     }
 
-    fn reduce(
-        state: &mut KeyBasedRetentionState,
-        key: Key,
-        record: ConsumerRecord,
-    ) -> MaxKeysReached {
+    fn reduce(state: &mut Self::S, key: Key, record: ConsumerRecord) -> MaxKeysReached {
         let (compaction_map, max_keys) = state;
 
         let l = compaction_map.len();
@@ -115,7 +114,7 @@ impl CompactionStrategy for KeyBasedRetention {
         }
     }
 
-    fn collect(state: KeyBasedRetentionState) -> CompactionMap {
+    fn collect(state: Self::S) -> CompactionMap {
         let (compaction_map, _) = state;
         compaction_map
     }
@@ -146,8 +145,11 @@ pub type NthKeyBasedRetentionState = (HashMap<Key, VecDeque<Offset>>, usize, usi
 #[async_trait]
 impl CompactionStrategy for NthKeyBasedRetention {
     type S = NthKeyBasedRetentionState;
+    type KS = ();
 
-    async fn init(&self) -> NthKeyBasedRetentionState {
+    fn key_state_init(&self) -> Self::KS {}
+
+    async fn init(&self) -> Self::S {
         (
             HashMap::with_capacity(self.max_compaction_keys),
             self.max_compaction_keys,
@@ -155,11 +157,7 @@ impl CompactionStrategy for NthKeyBasedRetention {
         )
     }
 
-    fn reduce(
-        state: &mut NthKeyBasedRetentionState,
-        key: Key,
-        record: ConsumerRecord,
-    ) -> MaxKeysReached {
+    fn reduce(state: &mut Self::S, key: Key, record: ConsumerRecord) -> MaxKeysReached {
         let (compaction_map, max_keys, max_records_per_key) = state;
 
         let l = compaction_map.len();
@@ -182,7 +180,7 @@ impl CompactionStrategy for NthKeyBasedRetention {
         }
     }
 
-    fn collect(state: NthKeyBasedRetentionState) -> CompactionMap {
+    fn collect(state: Self::S) -> CompactionMap {
         let (compaction_map, _, _) = state;
         compaction_map
             .into_iter()
@@ -352,8 +350,8 @@ where
 {
     Idle,
     PreparingAnalyze(Option<Offset>),
-    Analyzing(JoinHandle<(CS::S, Option<Offset>)>, Offset),
-    PreparingCompaction(CompactionMap, Offset, Option<Offset>),
+    Analyzing(JoinHandle<(CS::KS, CS::S, Option<Offset>)>, Offset),
+    PreparingCompaction(CS::KS, CompactionMap, Offset, Option<Offset>),
     Compacting(JoinHandle<Result<(), CompactionError>>, Option<Offset>),
 }
 
@@ -368,11 +366,12 @@ where
             Self::Analyzing(arg0, arg1) => {
                 f.debug_tuple("Analyzing").field(arg0).field(arg1).finish()
             }
-            Self::PreparingCompaction(arg0, arg1, arg2) => f
+            Self::PreparingCompaction(arg0, arg1, arg2, arg3) => f
                 .debug_tuple("PreparingCompaction")
                 .field(arg0)
                 .field(arg1)
                 .field(arg2)
+                .field(arg3)
                 .finish(),
             Self::Compacting(arg0, arg1) => {
                 f.debug_tuple("Compacting").field(arg0).field(arg1).finish()
@@ -421,8 +420,10 @@ where
                     if let Ok(Some(end_offset)) = r {
                         let task_scoped_topic_subscriber = self.scoped_topic_subscriber.clone();
                         let task_init = self.compaction_strategy.init().await;
+                        let task_key_state_init = self.compaction_strategy.key_state_init();
                         let h = tokio::spawn(async move {
                             let mut strategy_state = task_init;
+                            let mut key_state = task_key_state_init;
                             let mut records = task_scoped_topic_subscriber.subscribe();
                             let start_offset = next_start_offset;
                             next_start_offset = None;
@@ -433,7 +434,11 @@ where
                                 }
                                 if Some(record_offset) >= start_offset
                                     && matches!(
-                                        CS::reduce(&mut strategy_state, CS::key(&record), record),
+                                        CS::reduce(
+                                            &mut strategy_state,
+                                            CS::key(&mut key_state, &record),
+                                            record
+                                        ),
                                         MaxKeysReached(true)
                                     )
                                     && next_start_offset.is_none()
@@ -441,7 +446,7 @@ where
                                     next_start_offset = Some(record_offset);
                                 }
                             }
-                            (strategy_state, next_start_offset)
+                            (key_state, strategy_state, next_start_offset)
                         });
                         step_again = true;
                         Some(State::Analyzing(h, end_offset))
@@ -454,9 +459,10 @@ where
                     step_again = active_file_size >= self.compaction_threshold;
                     if step_again || h.is_finished() {
                         let r = h.await;
-                        let s = if let Ok((strategy_state, next_start_offset)) = r {
+                        let s = if let Ok((key_state, strategy_state, next_start_offset)) = r {
                             let compaction_map = CS::collect(strategy_state);
                             State::PreparingCompaction(
+                                key_state,
                                 compaction_map,
                                 *end_offset,
                                 next_start_offset,
@@ -470,9 +476,15 @@ where
                         None
                     }
                 }
-                State::PreparingCompaction(compaction_map, end_offset, next_start_offset) => {
+                State::PreparingCompaction(
+                    key_state,
+                    compaction_map,
+                    end_offset,
+                    next_start_offset,
+                ) => {
                     let r = self.topic_storage_ops.new_work_writer();
                     if let Ok(mut writer) = r {
+                        let mut task_key_state = key_state.clone();
                         let task_compaction_map = compaction_map.clone();
                         let task_end_offset = *end_offset;
                         let task_scoped_topic_subscriber = self.scoped_topic_subscriber.clone();
@@ -482,7 +494,7 @@ where
                                 if record.offset > task_end_offset {
                                     break;
                                 }
-                                let key = CS::key(&record);
+                                let key = CS::key(&mut task_key_state, &record);
                                 let copy = task_compaction_map
                                     .get(&key)
                                     .map(|min_offset| record.offset >= *min_offset)
@@ -614,17 +626,17 @@ mod tests {
         let mut state = compaction.init().await;
 
         assert_eq!(
-            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&r0), r0),
+            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&mut (), &r0), r0),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&r1), r1),
+            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&mut (), &r1), r1),
             MaxKeysReached(true),
         );
 
         assert_eq!(
-            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&r2), r2),
+            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&mut (), &r2), r2),
             MaxKeysReached(false)
         );
 
@@ -683,22 +695,22 @@ mod tests {
         let mut state = compaction.init().await;
 
         assert_eq!(
-            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&r0), r0),
+            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&mut (), &r0), r0),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&r1), r1),
+            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&mut (), &r1), r1),
             MaxKeysReached(true),
         );
 
         assert_eq!(
-            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&r2), r2),
+            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&mut (), &r2), r2),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&r3), r3),
+            NthKeyBasedRetention::reduce(&mut state, NthKeyBasedRetention::key(&mut (), &r3), r3),
             MaxKeysReached(false)
         );
 
@@ -809,6 +821,9 @@ mod tests {
     #[async_trait]
     impl CompactionStrategy for TemperatureSensorTopic {
         type S = TemperatureSensorCompactionState;
+        type KS = ();
+
+        fn key_state_init(&self) -> Self::KS {}
 
         async fn init(&self) -> TemperatureSensorCompactionState {
             TemperatureSensorCompactionState {
@@ -914,22 +929,38 @@ mod tests {
         let mut state = compaction.init().await;
 
         assert_eq!(
-            TemperatureSensorTopic::reduce(&mut state, TemperatureSensorTopic::key(&r0), r0),
+            TemperatureSensorTopic::reduce(
+                &mut state,
+                TemperatureSensorTopic::key(&mut (), &r0),
+                r0
+            ),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            TemperatureSensorTopic::reduce(&mut state, TemperatureSensorTopic::key(&r1), r1),
+            TemperatureSensorTopic::reduce(
+                &mut state,
+                TemperatureSensorTopic::key(&mut (), &r1),
+                r1
+            ),
             MaxKeysReached(false),
         );
 
         assert_eq!(
-            TemperatureSensorTopic::reduce(&mut state, TemperatureSensorTopic::key(&r2), r2),
+            TemperatureSensorTopic::reduce(
+                &mut state,
+                TemperatureSensorTopic::key(&mut (), &r2),
+                r2
+            ),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            TemperatureSensorTopic::reduce(&mut state, TemperatureSensorTopic::key(&r3), r3),
+            TemperatureSensorTopic::reduce(
+                &mut state,
+                TemperatureSensorTopic::key(&mut (), &r3),
+                r3
+            ),
             MaxKeysReached(false)
         );
 
@@ -987,6 +1018,9 @@ mod tests {
     #[async_trait]
     impl CompactionStrategy for TestCompactionStrategy {
         type S = CompactionMap;
+        type KS = ();
+
+        fn key_state_init(&self) -> Self::KS {}
 
         async fn init(&self) -> Self::S {
             CompactionMap::new()
