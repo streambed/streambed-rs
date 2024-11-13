@@ -36,7 +36,7 @@ pub trait CompactionStrategy {
     /// The key function computes a key that will be used by the compactor for
     /// subsequent use. In simple scenarios, this key can be the key field from
     /// the topic's record itself, which is the default assumption here.
-    fn key(key_state: &mut Self::KS, r: &ConsumerRecord) -> Key;
+    fn key(key_state: &mut Self::KS, r: &ConsumerRecord) -> Option<Key>;
 
     /// Produce the initial state for the reducer function.
     async fn init(&self) -> Self::S;
@@ -65,7 +65,7 @@ pub trait CompactionStrategy {
 ///
 /// KeyBasedRetention is guaranteed to return a key that is the record's key.
 pub struct KeyBasedRetention {
-    id_from_record: Option<fn(&ConsumerRecord) -> String>,
+    id_from_record: Option<fn(&ConsumerRecord) -> Option<String>>,
     max_compaction_keys: usize,
 }
 
@@ -83,7 +83,7 @@ impl KeyBasedRetention {
     /// A max_compaction_keys parameter is used to limit the number of distinct topic/partition/keys
     /// processed in a single run of the compactor.
     pub fn with_string_ids(
-        id_from_record: fn(&ConsumerRecord) -> String,
+        id_from_record: fn(&ConsumerRecord) -> Option<String>,
         max_compaction_keys: usize,
     ) -> Self {
         Self {
@@ -99,7 +99,7 @@ pub type KeyBasedRetentionState = (CompactionMap, usize);
 #[async_trait]
 impl CompactionStrategy for KeyBasedRetention {
     type S = KeyBasedRetentionState;
-    type KS = Option<(HashMap<String, Key>, fn(&ConsumerRecord) -> String)>;
+    type KS = Option<(HashMap<String, Key>, fn(&ConsumerRecord) -> Option<String>)>;
 
     fn key_init(&self) -> Self::KS {
         self.id_from_record.map(|id_from_record| {
@@ -110,18 +110,18 @@ impl CompactionStrategy for KeyBasedRetention {
         })
     }
 
-    fn key(key_state: &mut Self::KS, r: &ConsumerRecord) -> Key {
+    fn key(key_state: &mut Self::KS, r: &ConsumerRecord) -> Option<Key> {
         if let Some((key_map, id_from_record)) = key_state {
-            let id = (id_from_record)(r);
+            let id = (id_from_record)(r)?;
             if let Some(key) = key_map.get(id.as_str()) {
-                *key
+                Some(*key)
             } else {
                 let key = key_map.len() as Key;
                 let _ = key_map.insert(id, key);
-                key
+                Some(key)
             }
         } else {
-            r.key
+            Some(r.key)
         }
     }
 
@@ -158,7 +158,7 @@ impl CompactionStrategy for KeyBasedRetention {
 /// Similar to [KeyBasedRetention], but instead of retaining the latest offset for a key. this strategy retains
 /// the oldest nth offset associated with a key.
 pub struct NthKeyBasedRetention {
-    id_from_record: Option<fn(&ConsumerRecord) -> String>,
+    id_from_record: Option<fn(&ConsumerRecord) -> Option<String>>,
     max_compaction_keys: usize,
     max_records_per_key: usize,
 }
@@ -180,7 +180,7 @@ impl NthKeyBasedRetention {
     /// processed in a single run of the compactor. The max_records_per_key is used to retain the
     /// nth oldest key.
     pub fn with_string_ids(
-        id_from_record: fn(&ConsumerRecord) -> String,
+        id_from_record: fn(&ConsumerRecord) -> Option<String>,
         max_compaction_keys: usize,
         max_records_per_key: usize,
     ) -> Self {
@@ -198,7 +198,7 @@ pub type NthKeyBasedRetentionState = (HashMap<Key, VecDeque<Offset>>, usize, usi
 #[async_trait]
 impl CompactionStrategy for NthKeyBasedRetention {
     type S = NthKeyBasedRetentionState;
-    type KS = Option<(HashMap<String, Key>, fn(&ConsumerRecord) -> String)>;
+    type KS = Option<(HashMap<String, Key>, fn(&ConsumerRecord) -> Option<String>)>;
 
     fn key_init(&self) -> Self::KS {
         self.id_from_record.map(|id_from_record| {
@@ -209,18 +209,18 @@ impl CompactionStrategy for NthKeyBasedRetention {
         })
     }
 
-    fn key(key_state: &mut Self::KS, r: &ConsumerRecord) -> Key {
+    fn key(key_state: &mut Self::KS, r: &ConsumerRecord) -> Option<Key> {
         if let Some((key_map, id_from_record)) = key_state {
-            let id = (id_from_record)(r);
+            let id = (id_from_record)(r)?;
             if let Some(key) = key_map.get(id.as_str()) {
-                *key
+                Some(*key)
             } else {
                 let key = key_map.len() as Key;
                 let _ = key_map.insert(id, key);
-                key
+                Some(key)
             }
         } else {
-            r.key
+            Some(r.key)
         }
     }
 
@@ -507,18 +507,16 @@ where
                                 if record_offset > end_offset {
                                     break;
                                 }
-                                if Some(record_offset) >= start_offset
-                                    && matches!(
-                                        CS::reduce(
-                                            &mut strategy_state,
-                                            CS::key(&mut key_state, &record),
-                                            record
-                                        ),
-                                        MaxKeysReached(true)
-                                    )
-                                    && next_start_offset.is_none()
-                                {
-                                    next_start_offset = Some(record_offset);
+                                if Some(record_offset) >= start_offset {
+                                    if let Some(key) = CS::key(&mut key_state, &record) {
+                                        if matches!(
+                                            CS::reduce(&mut strategy_state, key, record),
+                                            MaxKeysReached(true)
+                                        ) && next_start_offset.is_none()
+                                        {
+                                            next_start_offset = Some(record_offset);
+                                        }
+                                    }
                                 }
                             }
                             (key_state, strategy_state, next_start_offset)
@@ -570,11 +568,14 @@ where
                                     break;
                                 }
                                 let key = CS::key(&mut task_key_state, &record);
-                                let copy = task_compaction_map
-                                    .get(&key)
-                                    .map(|min_offset| record.offset >= *min_offset)
-                                    .unwrap_or(true);
-
+                                let copy = if let Some(key) = key {
+                                    task_compaction_map
+                                        .get(&key)
+                                        .map(|min_offset| record.offset >= *min_offset)
+                                        .unwrap_or(true)
+                                } else {
+                                    false
+                                };
                                 if copy {
                                     let storable_record = StorableRecord {
                                         version: 0,
@@ -702,17 +703,29 @@ mod tests {
         let mut state = compaction.init().await;
 
         assert_eq!(
-            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&mut key_state, &r0), r0),
+            KeyBasedRetention::reduce(
+                &mut state,
+                KeyBasedRetention::key(&mut key_state, &r0).unwrap(),
+                r0
+            ),
             MaxKeysReached(false)
         );
 
         assert_eq!(
-            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&mut key_state, &r1), r1),
+            KeyBasedRetention::reduce(
+                &mut state,
+                KeyBasedRetention::key(&mut key_state, &r1).unwrap(),
+                r1
+            ),
             MaxKeysReached(true),
         );
 
         assert_eq!(
-            KeyBasedRetention::reduce(&mut state, KeyBasedRetention::key(&mut key_state, &r2), r2),
+            KeyBasedRetention::reduce(
+                &mut state,
+                KeyBasedRetention::key(&mut key_state, &r2).unwrap(),
+                r2
+            ),
             MaxKeysReached(false)
         );
 
@@ -774,7 +787,7 @@ mod tests {
         assert_eq!(
             NthKeyBasedRetention::reduce(
                 &mut state,
-                NthKeyBasedRetention::key(&mut key_state, &r0),
+                NthKeyBasedRetention::key(&mut key_state, &r0).unwrap(),
                 r0
             ),
             MaxKeysReached(false)
@@ -783,7 +796,7 @@ mod tests {
         assert_eq!(
             NthKeyBasedRetention::reduce(
                 &mut state,
-                NthKeyBasedRetention::key(&mut key_state, &r1),
+                NthKeyBasedRetention::key(&mut key_state, &r1).unwrap(),
                 r1
             ),
             MaxKeysReached(true),
@@ -792,7 +805,7 @@ mod tests {
         assert_eq!(
             NthKeyBasedRetention::reduce(
                 &mut state,
-                NthKeyBasedRetention::key(&mut key_state, &r2),
+                NthKeyBasedRetention::key(&mut key_state, &r2).unwrap(),
                 r2
             ),
             MaxKeysReached(false)
@@ -801,7 +814,7 @@ mod tests {
         assert_eq!(
             NthKeyBasedRetention::reduce(
                 &mut state,
-                NthKeyBasedRetention::key(&mut key_state, &r3),
+                NthKeyBasedRetention::key(&mut key_state, &r3).unwrap(),
                 r3
             ),
             MaxKeysReached(false)
@@ -918,8 +931,8 @@ mod tests {
 
         fn key_init(&self) -> Self::KS {}
 
-        fn key(_key_state: &mut Self::KS, r: &ConsumerRecord) -> Key {
-            r.key
+        fn key(_key_state: &mut Self::KS, r: &ConsumerRecord) -> Option<Key> {
+            Some(r.key)
         }
 
         async fn init(&self) -> TemperatureSensorCompactionState {
@@ -1028,7 +1041,7 @@ mod tests {
         assert_eq!(
             TemperatureSensorTopic::reduce(
                 &mut state,
-                TemperatureSensorTopic::key(&mut (), &r0),
+                TemperatureSensorTopic::key(&mut (), &r0).unwrap(),
                 r0
             ),
             MaxKeysReached(false)
@@ -1037,7 +1050,7 @@ mod tests {
         assert_eq!(
             TemperatureSensorTopic::reduce(
                 &mut state,
-                TemperatureSensorTopic::key(&mut (), &r1),
+                TemperatureSensorTopic::key(&mut (), &r1).unwrap(),
                 r1
             ),
             MaxKeysReached(false),
@@ -1046,7 +1059,7 @@ mod tests {
         assert_eq!(
             TemperatureSensorTopic::reduce(
                 &mut state,
-                TemperatureSensorTopic::key(&mut (), &r2),
+                TemperatureSensorTopic::key(&mut (), &r2).unwrap(),
                 r2
             ),
             MaxKeysReached(false)
@@ -1055,7 +1068,7 @@ mod tests {
         assert_eq!(
             TemperatureSensorTopic::reduce(
                 &mut state,
-                TemperatureSensorTopic::key(&mut (), &r3),
+                TemperatureSensorTopic::key(&mut (), &r3).unwrap(),
                 r3
             ),
             MaxKeysReached(false)
@@ -1119,8 +1132,8 @@ mod tests {
 
         fn key_init(&self) -> Self::KS {}
 
-        fn key(_key_state: &mut Self::KS, r: &ConsumerRecord) -> Key {
-            r.key
+        fn key(_key_state: &mut Self::KS, r: &ConsumerRecord) -> Option<Key> {
+            Some(r.key)
         }
 
         async fn init(&self) -> Self::S {
