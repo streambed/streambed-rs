@@ -3,6 +3,7 @@ use std::{error::Error, fmt::Debug};
 use super::*;
 
 use log::{debug, error};
+use smol_str::SmolStr;
 use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
 
@@ -59,14 +60,18 @@ pub trait CompactionStrategy {
     fn collect(state: Self::S) -> CompactionMap;
 }
 
+/// A qualified id is a string that identifies a type of a record and some key derived from the record e.g.
+/// a an entity and a primary key of the entity.
+pub type Qid = SmolStr;
+
 /// The goal of key-based retention is to keep the latest record for a given
 /// key within a topic. This is the same as Kafka's key-based retention and
 /// effectively makes the commit log a key value store.
 ///
 /// KeyBasedRetention is guaranteed to return a key that is the record's key.
 pub struct KeyBasedRetention {
-    id_from_record: Option<fn(&ConsumerRecord) -> Option<String>>,
     max_compaction_keys: usize,
+    qid_from_record: Option<fn(&ConsumerRecord) -> Option<Qid>>,
 }
 
 impl KeyBasedRetention {
@@ -74,20 +79,20 @@ impl KeyBasedRetention {
     /// processed in a single run of the compactor.
     pub fn new(max_compaction_keys: usize) -> Self {
         Self {
-            id_from_record: None,
+            qid_from_record: None,
             max_compaction_keys,
         }
     }
 
-    /// Similar to the above, but the id of a record will be determined by a function.
+    /// Similar to the above, but the qualified id of a record will be determined by a function.
     /// A max_compaction_keys parameter is used to limit the number of distinct topic/partition/keys
     /// processed in a single run of the compactor.
-    pub fn with_string_ids(
-        id_from_record: fn(&ConsumerRecord) -> Option<String>,
+    pub fn with_qids(
+        qid_from_record: fn(&ConsumerRecord) -> Option<Qid>,
         max_compaction_keys: usize,
     ) -> Self {
         Self {
-            id_from_record: Some(id_from_record),
+            qid_from_record: Some(qid_from_record),
             max_compaction_keys,
         }
     }
@@ -99,10 +104,10 @@ pub type KeyBasedRetentionState = (CompactionMap, usize);
 #[async_trait]
 impl CompactionStrategy for KeyBasedRetention {
     type S = KeyBasedRetentionState;
-    type KS = Option<(HashMap<String, Key>, fn(&ConsumerRecord) -> Option<String>)>;
+    type KS = Option<(HashMap<Qid, Key>, fn(&ConsumerRecord) -> Option<Qid>)>;
 
     fn key_init(&self) -> Self::KS {
-        self.id_from_record.map(|id_from_record| {
+        self.qid_from_record.map(|id_from_record| {
             (
                 HashMap::with_capacity(self.max_compaction_keys),
                 id_from_record,
@@ -158,9 +163,9 @@ impl CompactionStrategy for KeyBasedRetention {
 /// Similar to [KeyBasedRetention], but instead of retaining the latest offset for a key. this strategy retains
 /// the oldest nth offset associated with a key.
 pub struct NthKeyBasedRetention {
-    id_from_record: Option<fn(&ConsumerRecord) -> Option<String>>,
     max_compaction_keys: usize,
     max_records_per_key: usize,
+    qid_from_record: Option<fn(&ConsumerRecord) -> Option<Qid>>,
 }
 
 impl NthKeyBasedRetention {
@@ -169,23 +174,23 @@ impl NthKeyBasedRetention {
     /// nth oldest key.
     pub fn new(max_compaction_keys: usize, max_records_per_key: usize) -> Self {
         Self {
-            id_from_record: None,
             max_compaction_keys,
             max_records_per_key,
+            qid_from_record: None,
         }
     }
 
-    /// Similar to the above, but the id of a record will be determined by a function.
+    /// Similar to the above, but the qualified id of a record will be determined by a function.
     /// A max_compaction_keys parameter is used to limit the number of distinct topic/partition/keys
     /// processed in a single run of the compactor. The max_records_per_key is used to retain the
     /// nth oldest key.
-    pub fn with_string_ids(
-        id_from_record: fn(&ConsumerRecord) -> Option<String>,
+    pub fn with_qids(
         max_compaction_keys: usize,
         max_records_per_key: usize,
+        qid_from_record: fn(&ConsumerRecord) -> Option<Qid>,
     ) -> Self {
         Self {
-            id_from_record: Some(id_from_record),
+            qid_from_record: Some(qid_from_record),
             max_compaction_keys,
             max_records_per_key,
         }
@@ -198,10 +203,10 @@ pub type NthKeyBasedRetentionState = (HashMap<Key, VecDeque<Offset>>, usize, usi
 #[async_trait]
 impl CompactionStrategy for NthKeyBasedRetention {
     type S = NthKeyBasedRetentionState;
-    type KS = Option<(HashMap<String, Key>, fn(&ConsumerRecord) -> Option<String>)>;
+    type KS = Option<(HashMap<Qid, Key>, fn(&ConsumerRecord) -> Option<Qid>)>;
 
     fn key_init(&self) -> Self::KS {
-        self.id_from_record.map(|id_from_record| {
+        self.qid_from_record.map(|id_from_record| {
             (
                 HashMap::with_capacity(self.max_compaction_keys),
                 id_from_record,
