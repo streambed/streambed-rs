@@ -8,9 +8,22 @@ repository.workspace = true
 description = "Patterns for working with streambed"
 
 [dependencies]
-async-trait = { workspace = true }
-tokio = { workspace = true, features = [ "sync" ] }
+async-trait = { workspace = true, optional = true }
+tokio = { workspace = true, features = ["sync"], optional = true }
+streambed = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
+ciborium = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true, default-features = false }
+async-stream = { workspace = true, optional = true }
 
-[dev-dependencies.tokio]
-workspace = true
-features = [ "full" ]
+[features]
+default = ["ask", "log-adapter", "codec"]
+ask = ["dep:tokio", "dep:async-trait"]
+codec = ["dep:streambed", "dep:rand", "dep:ciborium", "dep:serde"]
+log-adapter = ["dep:async-stream", "dep:futures-util", "codec"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+streambed-logged.workspace = true
+streambed-confidant.workspace = true
