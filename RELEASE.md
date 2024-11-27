@@ -9,6 +9,7 @@ Releasing
 ```
 cargo publish -p streambed
 cargo publish -p streambed-test
+cargo publish -p streambed-codec
 cargo publish -p streambed-confidant
 cargo publish -p streambed-confidant-cli
 cargo publish -p streambed-kafka
