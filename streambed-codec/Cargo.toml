@@ -1,0 +1,23 @@
+[package]
+name = "streambed-codec"
+description = "Codecs and a typed wrapped for streambed CommitLog"
+
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+streambed.workspace = true
+rand.workspace = true
+ciborium.workspace = true
+serde.workspace = true
+futures-util = { workspace = true, default-features = false }
+async-stream.workspace = true
+
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+streambed-logged.workspace = true
+streambed-confidant.workspace = true
