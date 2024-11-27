@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use async_stream::stream;
 use futures_util::{Stream, StreamExt};
 use rand::thread_rng;
