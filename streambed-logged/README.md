@@ -137,7 +137,7 @@ thousands of records.
 
 The compaction of topics is an application concern and as it is able
 to consider the contents of a record. Logged provides functions to atomically "split" 
-an existing topic log at its head and yield a new topic to compact to. The 
+an existing topic log at its head and yield a new topic to compact to. An 
 application-based compactor can then consume the existing topic, retain the records 
 it needs in memory. Having consumed the topic, the application-based compactor will 
 append the retained records to the topic to compact to. Once appended, logged can be 

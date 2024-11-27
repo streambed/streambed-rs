@@ -10,6 +10,9 @@ A commit log modelled on [Apache Kafka](https://kafka.apache.org/) is provided, 
 
 A secret store modelled on [Hashicorp Vault](https://www.vaultproject.io/) is provided along with partial support for the Vault HTTP API.
 
+File-based implementations of the commit log and secret store suitable for use on embedded Linux are provided with 
+[logged](streambed-logged/README.md) and [confidant](streambed-confidant/README.md) respectively.
+
 Production services using the commit log and secret store have been shown to use less than 3MiB of resident memory
 while also offering good performance.
 
