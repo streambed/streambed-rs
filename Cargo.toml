@@ -17,7 +17,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.11.1"                                           # WHEN CHANGING THIS, CHANGE THE "STREAMBED" DEPENDENCIES BELOW ALSO.
+version = "0.12.0"                                           # WHEN CHANGING THIS, CHANGE THE "STREAMBED" DEPENDENCIES BELOW ALSO.
 edition = "2021"
 rust-version = "1.70.0"
 license = "Apache-2.0"
@@ -47,7 +47,7 @@ log = "0.4.17"
 metrics = { version = "0.20.1", default-features = false }
 postcard = { version = "1.0.8", default-features = false }
 rand = "0.8.5"
-reqwest = "0.11.13"
+reqwest = "0.12.03"
 scopeguard = "1.1"
 serde = "1.0.151"
 serde_json = "1.0.90"
@@ -60,7 +60,7 @@ tokio-stream = "0.1.11"
 tokio-util = "0.7.4"
 warp = "0.3"
 
-streambed = { path = "streambed", version = "0.11.1" }
-streambed-confidant = { path = "streambed-confidant", version = "0.11.1" }
-streambed-logged = { path = "streambed-logged", version = "0.11.1" }
-streambed-test = { path = "streambed-test", version = "0.11.1" }
+streambed = { path = "streambed", version = "0.12.0" }
+streambed-confidant = { path = "streambed-confidant", version = "0.12.0" }
+streambed-logged = { path = "streambed-logged", version = "0.12.0" }
+streambed-test = { path = "streambed-test", version = "0.12.0" }
