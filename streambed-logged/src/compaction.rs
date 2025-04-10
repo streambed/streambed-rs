@@ -875,7 +875,7 @@ mod tests {
                 TemperatureSensorEventKey::NameChanged(id) => (1u64, id),
                 TemperatureSensorEventKey::TemperatureSensed(id) => (2u64, id),
             };
-            event_type << EVENT_TYPE_BIT_SHIFT | (id as u64)
+            (event_type << EVENT_TYPE_BIT_SHIFT) | (id as u64)
         }
     }
 

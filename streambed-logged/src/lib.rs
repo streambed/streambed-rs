@@ -475,6 +475,7 @@ impl CommitLog for FileLog {
             tokio::spawn(async move {
                 let mut buf = BytesMut::with_capacity(task_read_buffer_size);
                 let mut decoder = StorableRecordDecoder::new(task_max_record_size);
+                let mut last_modification_time = None;
                 'outer: loop {
                     buf.clear();
 
@@ -490,6 +491,17 @@ impl CommitLog for FileLog {
                         drop(locked_topic_file_ops);
                         topic_file_op
                     };
+
+                    let modification_time = topic_file_op.modification_time();
+                    if modification_time <= last_modification_time {
+                        if task_tx.is_closed() {
+                            break;
+                        }
+                        time::sleep(TOPIC_FILE_CONSUMER_POLL).await;
+                        continue;
+                    } else {
+                        last_modification_time = modification_time;
+                    }
 
                     let mut topic_files = topic_file_op
                         .open_files(task_open_options.clone(), false)

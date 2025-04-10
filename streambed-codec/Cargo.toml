@@ -13,7 +13,7 @@ streambed.workspace = true
 rand.workspace = true
 ciborium.workspace = true
 serde.workspace = true
-futures-util = { workspace = true, default-features = false }
+futures-util.workspace = true
 async-stream.workspace = true
 
 
