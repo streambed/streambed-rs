@@ -17,6 +17,7 @@ use std::{
     io::{self, BufWriter, Write},
     path::PathBuf,
     sync::{Arc, Mutex},
+    time::SystemTime,
 };
 
 use streambed::commit_log::Topic;
@@ -128,6 +129,31 @@ impl TopicFileOp {
         let r = open_options.open(present_path);
         drop(locked_write_handle);
         r.map_err(TopicFileOpError::IoError)
+    }
+
+    pub fn modification_time(&self) -> Option<SystemTime> {
+        let locked_write_handle = self.write_handle.lock().ok()?;
+
+        let present_path = self.root_path.join(self.topic.as_str());
+        let modification_time = fs::metadata(&present_path)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .or_else(|| {
+                let history_path = present_path.with_extension(HISTORY_FILE_EXTENSION);
+                fs::metadata(&history_path)
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+            })
+            .or_else(|| {
+                let ancient_history_path =
+                    present_path.with_extension(ANCIENT_HISTORY_FILE_EXTENSION);
+                fs::metadata(&ancient_history_path)
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+            });
+
+        drop(locked_write_handle);
+        modification_time
     }
 
     pub fn open_files(
